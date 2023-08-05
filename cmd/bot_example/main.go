@@ -7,12 +7,12 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/access_checker_demo"
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/cached_user_bot"
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/example_processor"
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/session_storage"
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/telegram_bot"
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/user_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/access_checker_demo"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/cached_user_bot"
+	example_processor2 "github.com/MobDev-Hobby/telegram-nda-guard/domain/example_processor"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/session_storage"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/telegram_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot"
 	"github.com/caarlos0/env"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
@@ -81,12 +81,12 @@ func main() {
 
 	accessChecker := access_checker_demo.New()
 
-	channels := make(map[int64]example_processor.CheckUserAccess)
+	channels := make(map[int64]example_processor2.CheckUserAccess)
 	for _, channel := range options.Channels {
 		channels[channel] = accessChecker
 	}
 
-	exampleProcessorDomain := example_processor.New(
+	exampleProcessorDomain := example_processor2.New(
 		sessionStorageDomain,
 		telegramBotDomain,
 		cachedUserBotDomain,

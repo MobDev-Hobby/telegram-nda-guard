@@ -13,9 +13,9 @@ import (
 )
 
 type UserBotInstance struct {
-	userBotDomain     *Domain
-	sessionStorage    SessionStorage
-	name              string
+	userBotDomain  *Domain
+	sessionStorage SessionStorage
+	name           string
 	dispatcher        tg.UpdateDispatcher
 	client            *telegram.Client
 	channelUsersCache map[int64][]tg.User

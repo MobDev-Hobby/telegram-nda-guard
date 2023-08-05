@@ -5,9 +5,9 @@
 package session_storage
 
 import (
-	reflect "reflect"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 )
 
 // MockCryproProvider is a mock of CryproProvider interface.

@@ -10,8 +10,8 @@ import (
 )
 
 type Domain struct {
-	log          Logger
-	cryptor      cipher.Block
+	log     Logger
+	cryptor cipher.Block
 	dir          string
 	randomReader io.Reader
 }

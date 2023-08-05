@@ -3,9 +3,9 @@ package example_processor
 import (
 	"context"
 
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/session_storage"
+	user_bot2 "github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/interfaces"
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/session_storage"
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/user_bot"
 	"github.com/go-telegram/bot"
 	"github.com/gotd/td/tg"
 )
@@ -25,9 +25,9 @@ type CheckUserAccess interface {
 type UserBotProvider interface {
 	NewBot(
 		ctx context.Context,
-		sessionStorage user_bot.SessionStorage,
-		authenticator user_bot.Authenticator,
-	) user_bot.UserBot
+		sessionStorage user_bot2.SessionStorage,
+		authenticator user_bot2.Authenticator,
+	) user_bot2.UserBot
 }
 
 type UserBot interface {

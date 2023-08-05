@@ -3,7 +3,7 @@ package cached_user_bot
 import (
 	"context"
 
-	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/user_bot"
+	user_bot2 "github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot"
 )
 
 type CachedBotWrap struct {
@@ -13,9 +13,9 @@ type CachedBotWrap struct {
 
 func (d *Domain) NewBot(
 	ctx context.Context,
-	sessionStorage user_bot.SessionStorage,
-	authenticator user_bot.Authenticator,
-) user_bot.UserBot {
+	sessionStorage user_bot2.SessionStorage,
+	authenticator user_bot2.Authenticator,
+) user_bot2.UserBot {
 	return &CachedBotWrap{
 		d: d,
 		bot: d.userBotProvider.NewBot(
