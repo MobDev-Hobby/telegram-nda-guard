@@ -10,7 +10,7 @@ import (
 )
 
 type Domain struct {
-	log          *zap.SugaredLogger
+	log          Logger
 	cryptor      cipher.Block
 	dir          string
 	randomReader io.Reader
@@ -19,12 +19,12 @@ type Domain struct {
 func New(
 	dir string,
 	cryptor CryproProvider,
-	log *zap.SugaredLogger,
+	log Logger,
 ) (*Domain, error) {
 	if err := unix.Access(dir, unix.W_OK); err != nil {
 		return nil, err
 	}
-	logger := zap.NewNop().Sugar()
+	logger := Logger(zap.NewNop().Sugar())
 	if log != nil {
 		logger = log
 	}

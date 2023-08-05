@@ -2,7 +2,11 @@ package user_bot
 
 import (
 	"context"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/interfaces"
 )
+
+type Logger interfaces.Logger
 
 type SessionStorage interface {
 	LoadSession(ctx context.Context) ([]byte, error)

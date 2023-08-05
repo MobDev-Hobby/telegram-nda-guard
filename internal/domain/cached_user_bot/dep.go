@@ -3,9 +3,12 @@ package cached_user_bot
 import (
 	"context"
 
+	"github.com/MobDev-Hobby/telegram-nda-guard/interfaces"
 	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/user_bot"
 	"github.com/gotd/td/tg"
 )
+
+type Logger interfaces.Logger
 
 type UserBot interface {
 	GetChannelUsers(

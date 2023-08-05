@@ -2,9 +2,13 @@ package telegram_bot
 
 import (
 	"context"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/interfaces"
 )
 
 //go:generate mockgen -source dep.go -destination ./dep_mock_test.go -package ${GOPACKAGE}
+
+type Logger interfaces.Logger
 
 type UserBotProvider[
 	UserBotGenericInterface UserBotInstance,

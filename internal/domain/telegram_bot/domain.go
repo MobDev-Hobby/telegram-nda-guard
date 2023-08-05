@@ -7,12 +7,12 @@ import (
 
 type Domain struct {
 	apiKey    string
-	log       *zap.SugaredLogger
+	log       Logger
 	botClient *bot.Bot
 }
 
-func New(apiKey string, log *zap.SugaredLogger) *Domain {
-	logger := zap.NewNop().Sugar()
+func New(apiKey string, log Logger) *Domain {
+	logger := Logger(zap.NewNop().Sugar())
 	if log != nil {
 		logger = log
 	}

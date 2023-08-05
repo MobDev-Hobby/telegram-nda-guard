@@ -10,15 +10,15 @@ type Domain struct {
 	userBotProvider UserBotProvider
 	cacheTime       time.Duration
 	cache           Cache
-	log             *zap.SugaredLogger
+	log             Logger
 }
 
 func New(
 	userBotProvider UserBotProvider,
 	cacheTime time.Duration,
-	log *zap.SugaredLogger,
+	log Logger,
 ) *Domain {
-	logger := zap.NewNop().Sugar()
+	logger := Logger(zap.NewNop().Sugar())
 	if log != nil {
 		logger = log
 	}

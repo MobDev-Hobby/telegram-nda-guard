@@ -15,7 +15,7 @@ type Domain struct {
 	userBot                UserBot
 	adminUserChatId        int64
 	setAdminHash           string
-	log                    *zap.SugaredLogger
+	log                    Logger
 	accessCheckers         map[int64]CheckUserAccess
 	accessCheckInterval    time.Duration
 }
@@ -26,11 +26,11 @@ func New(
 	userBotProvider UserBotProvider,
 	adminUserChatId int64,
 	setAdminHash string,
-	log *zap.SugaredLogger,
+	log Logger,
 	accessCheckers map[int64]CheckUserAccess,
 	accessCheckInterval time.Duration,
 ) *Domain {
-	logger := zap.NewNop().Sugar()
+	logger := Logger(zap.NewNop().Sugar())
 	if log != nil {
 		logger = log
 	}

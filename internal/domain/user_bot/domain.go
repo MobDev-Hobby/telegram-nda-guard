@@ -7,15 +7,15 @@ import (
 type Domain struct {
 	appId  int
 	appKey string
-	log    *zap.SugaredLogger
+	log    Logger
 }
 
 func New(
 	appId int,
 	appKey string,
-	log *zap.SugaredLogger,
+	log Logger,
 ) *Domain {
-	logger := zap.NewNop().Sugar()
+	logger := Logger(zap.NewNop().Sugar())
 	if log != nil {
 		logger = log
 	}

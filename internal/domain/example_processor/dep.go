@@ -3,11 +3,14 @@ package example_processor
 import (
 	"context"
 
+	"github.com/MobDev-Hobby/telegram-nda-guard/interfaces"
 	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/session_storage"
 	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/user_bot"
 	"github.com/go-telegram/bot"
 	"github.com/gotd/td/tg"
 )
+
+type Logger interfaces.Logger
 
 type StorageProvider interface {
 	GetStorage(
