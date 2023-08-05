@@ -31,14 +31,14 @@ func (d *Domain) Run(
 	sessionStorage := d.sessionStorageProvider.GetStorage(userBotName)
 
 	if d.adminUserChatId != 0 {
-		d.log.Debug("Run userbot for user %d", d.adminUserChatId)
+		d.log.Debugf("Run userbot for user %d", d.adminUserChatId)
 		d.userBot = d.userBotProvider.NewBot(
 			ctx,
 			sessionStorage,
 			d.NewBotAuthFlow(d.adminUserChatId),
 		)
 	} else {
-		d.log.Debug("No userbot admin found want new")
+		d.log.Debugf("No userbot admin found want new")
 
 		d.telegramBot.GetBot().RegisterHandlerMatchFunc(
 			func(update *models.Update) bool {
