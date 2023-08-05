@@ -28,7 +28,7 @@ func (d *Domain) RunUserAccessChecker(ctx context.Context) {
 							}
 							
 							for _, user := range users {
-								hasAccess := checker.HasAccess(user)
+								hasAccess := checker.HasAccess(ctx, user)
 								d.log.Infof(
 									"User ID %d, username %s, phone %s, firstname %s, lastname %s, access %v, channel %d",
 									user.ID, user.Username, user.Phone, user.FirstName, user.LastName, hasAccess, channelId,

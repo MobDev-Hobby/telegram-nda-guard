@@ -19,7 +19,7 @@ type StorageProvider interface {
 }
 
 type CheckUserAccess interface {
-	HasAccess(tg.User) bool
+	HasAccess(context.Context, tg.User) bool
 }
 
 type UserBotProvider interface {
