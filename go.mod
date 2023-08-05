@@ -1,4 +1,4 @@
-module github.com/Mobdev-Hobby/telegram-nda-guard
+module github.com/MobDev-Hobby/telegram-nda-guard
 
 go 1.20
 
