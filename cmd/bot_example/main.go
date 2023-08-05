@@ -13,6 +13,7 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/session_storage"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/telegram_bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_checker_cached_wrap"
 	"github.com/caarlos0/env"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
@@ -80,10 +81,14 @@ func main() {
 	)
 
 	accessChecker := access_checker_demo.New()
+	cachedAccessChecker := user_checker_cached_wrap.New(
+		accessChecker,
+		options.AccessCheckerCacheTTL,
+	)
 
 	channels := make(map[int64]example_processor2.CheckUserAccess)
 	for _, channel := range options.Channels {
-		channels[channel] = accessChecker
+		channels[channel] = cachedAccessChecker
 	}
 
 	exampleProcessorDomain := example_processor2.New(
