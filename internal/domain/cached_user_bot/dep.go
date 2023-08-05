@@ -3,7 +3,7 @@ package cached_user_bot
 import (
 	"context"
 
-	"github.com/Mobdev-Hobby/telegram-nda-guard/internal/domain/user_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/user_bot"
 	"github.com/gotd/td/tg"
 )
 

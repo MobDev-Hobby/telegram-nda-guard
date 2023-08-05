@@ -7,12 +7,12 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/Mobdev-Hobby/telegram-nda-guard/internal/domain/access_checker_demo"
-	"github.com/Mobdev-Hobby/telegram-nda-guard/internal/domain/cached_user_bot"
-	"github.com/Mobdev-Hobby/telegram-nda-guard/internal/domain/example_processor"
-	"github.com/Mobdev-Hobby/telegram-nda-guard/internal/domain/session_storage"
-	"github.com/Mobdev-Hobby/telegram-nda-guard/internal/domain/telegram_bot"
-	"github.com/Mobdev-Hobby/telegram-nda-guard/internal/domain/user_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/access_checker_demo"
+	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/cached_user_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/example_processor"
+	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/session_storage"
+	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/telegram_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/internal/domain/user_bot"
 	"github.com/caarlos0/env"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
@@ -45,8 +45,6 @@ func main() {
 	if err != nil {
 		logger.Panicf("can't parse env options: %s", err)
 	}
-	
-	
 
 	cryptoProvider, err := aes.NewCipher(
 		[]byte(options.SessionKey),
@@ -69,7 +67,7 @@ func main() {
 		options.TelegramAppKey,
 		logger,
 	)
-	
+
 	cachedUserBotDomain := cached_user_bot.New(
 		userBotDomain,
 		options.ChannelMembersCacheTTL,
@@ -83,13 +81,11 @@ func main() {
 
 	accessChecker := access_checker_demo.New()
 
-	
 	channels := make(map[int64]example_processor.CheckUserAccess)
 	for _, channel := range options.Channels {
 		channels[channel] = accessChecker
 	}
-	
-	
+
 	exampleProcessorDomain := example_processor.New(
 		sessionStorageDomain,
 		telegramBotDomain,
@@ -105,8 +101,8 @@ func main() {
 	if err != nil {
 		logger.Panicf("can't run bot: %s", err)
 	}
-	
-	<- ctx.Done()
+
+	<-ctx.Done()
 
 	logger.Infof("good bye!")
 }
