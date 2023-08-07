@@ -7,13 +7,15 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/MobDev-Hobby/telegram-nda-guard/domain/access_checker_demo"
-	"github.com/MobDev-Hobby/telegram-nda-guard/domain/cached_user_bot"
-	example_processor2 "github.com/MobDev-Hobby/telegram-nda-guard/domain/example_processor"
-	"github.com/MobDev-Hobby/telegram-nda-guard/domain/session_storage"
-	"github.com/MobDev-Hobby/telegram-nda-guard/domain/telegram_bot"
-	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot"
-	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_checker_cached_wrap"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/access_checker/access_checker_cached_wrap"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/access_checker/access_checker_demo"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/processor/processor_access_control_demo"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/report_processor/report_processor_multiplexor"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/report_processor/report_processor_send_admin_with_telegram_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/session_storage/session_storage_file"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/telegram_bot/telegram_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot/user_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot/user_bot_cached_wrap"
 	"github.com/caarlos0/env"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
@@ -54,7 +56,7 @@ func main() {
 		logger.Panicf("can't init crypto provider: %s", err)
 	}
 
-	sessionStorageDomain, err := session_storage.New(
+	sessionStorageDomain, err := session_storage_file.New(
 		"/tmp",
 		cryptoProvider,
 		logger,
@@ -69,7 +71,7 @@ func main() {
 		logger,
 	)
 
-	cachedUserBotDomain := cached_user_bot.New(
+	cachedUserBotDomain := user_bot_cached_wrap.New(
 		userBotDomain,
 		options.ChannelMembersCacheTTL,
 		logger,
@@ -81,20 +83,30 @@ func main() {
 	)
 
 	accessChecker := access_checker_demo.New()
-	cachedAccessChecker := user_checker_cached_wrap.New(
+	cachedAccessChecker := access_checker_cached_wrap.New(
 		accessChecker,
 		options.AccessCheckerCacheTTL,
 	)
 
-	channels := make(map[int64]example_processor2.CheckUserAccess)
+	channels := make(map[int64]processor_access_control_demo.CheckUserAccess)
 	for _, channel := range options.Channels {
 		channels[channel] = cachedAccessChecker
 	}
+	
+	reportProcessorDomain := report_processor_multiplexor.New(
+		logger,
+		report_processor_send_admin_with_telegram_bot.New(
+			telegramBotDomain,
+			options.ReportChannels,
+			logger,
+		),
+	)
 
-	exampleProcessorDomain := example_processor2.New(
+	exampleProcessorDomain := processor_access_control_demo.New(
 		sessionStorageDomain,
 		telegramBotDomain,
 		cachedUserBotDomain,
+		reportProcessorDomain,
 		options.AdminChatId,
 		options.AdminSecret,
 		logger,

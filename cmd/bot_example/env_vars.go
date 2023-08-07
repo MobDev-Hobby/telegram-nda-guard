@@ -13,5 +13,5 @@ type environmentConfig struct {
 	AccessCheckInterval    time.Duration `env:"ACCESS_CHECK_INTERVAL"`
 	ChannelMembersCacheTTL time.Duration `env:"CHANNEL_MEMBERS_CACHE_TTL"`
 	AccessCheckerCacheTTL  time.Duration `env:"ACCESS_CHECKER_CACHE_TTL"`
-
+	ReportChannels         []int64       `env:"REPORT_CHANNELS" envSeparator:","`
 }
