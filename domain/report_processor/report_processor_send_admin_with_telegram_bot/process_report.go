@@ -15,11 +15,6 @@ func (d *Domain) ProcessReport(
 	report report_processor.AccessReport,
 ) {
 
-	botClient := d.botProvider.GetBot()
-	if botClient == nil {
-		return
-	}
-
 	messages := make([]string, 1)
 	message := strings.Builder{}
 
@@ -126,7 +121,7 @@ func (d *Domain) ProcessReport(
 				continue
 			}
 
-			_, err := botClient.SendMessage(
+			_, err := d.botClient.SendMessage(
 				ctx,
 				&bot.SendMessageParams{
 					ChatID:                chatId,

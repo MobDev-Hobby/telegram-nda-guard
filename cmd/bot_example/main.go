@@ -14,6 +14,7 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/report_processor/report_processor_send_admin_with_telegram_bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/session_storage/session_storage_file"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/telegram_bot/telegram_bot"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/telegram_bot/telegram_bot_send_message_ratelimited"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot/user_bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/user_bot/user_bot_cached_wrap"
 	"github.com/caarlos0/env"
@@ -77,8 +78,16 @@ func main() {
 		logger,
 	)
 
-	telegramBotDomain := telegram_bot.New(
+	telegramBotDomain, err := telegram_bot.New(
 		options.TelegramBotKey,
+		logger,
+	)
+	if err != nil {
+		logger.Panicf("can't init session storage: %s", err)
+	}
+	
+	telegramBotMessageSender := telegram_bot_send_message_ratelimited.New(
+		telegramBotDomain.GetBot(),
 		logger,
 	)
 
@@ -96,7 +105,7 @@ func main() {
 	reportProcessorDomain := report_processor_multiplexor.New(
 		logger,
 		report_processor_send_admin_with_telegram_bot.New(
-			telegramBotDomain,
+			telegramBotMessageSender,
 			options.ReportChannels,
 			logger,
 		),

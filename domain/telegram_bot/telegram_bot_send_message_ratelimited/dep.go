@@ -1,4 +1,4 @@
-package report_processor_send_admin_with_telegram_bot
+package telegram_bot_send_message_ratelimited
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
+
+//go:generate mockgen -source dep.go -destination ./dep_mock_test.go -package ${GOPACKAGE}
 
 type Logger interfaces.Logger
 
