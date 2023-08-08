@@ -14,15 +14,19 @@ func (d *Domain) SendMessage(
 	params *bot.SendMessageParams,
 ) (*models.Message, error) {
 
+	d.log.Debugf("Wait total rate limiter")
 	if err := d.rateLimitTotal.Wait(ctx); err != nil {
 		return nil, err
 	}
+	d.log.Debugf("Allowed by rate limiter")
 
 	chatId := params.ChatID.(int64)
 	if limit, found := d.rateLimitByChannelId[chatId]; found {
+		d.log.Debugf("Wait channel %d rate limiter", chatId)
 		if err := limit.Wait(ctx); err != nil {
 			return nil, err
 		}
+		d.log.Debugf("Allowed by channel %d rate limiter", chatId)
 	} else {
 		// Telegram limit is 20 messages for 1 chat per minute,
 		// take 15 for time window inconsistency risk
@@ -33,5 +37,5 @@ func (d *Domain) SendMessage(
 		)
 	}
 
-	return d.SendMessage(ctx, params)
+	return d.botClient.SendMessage(ctx, params)
 }
