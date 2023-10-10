@@ -10,6 +10,7 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/access_checker/access_checker_cached_wrap"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/access_checker/access_checker_demo"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/processor/processor_access_control_demo"
+	"github.com/MobDev-Hobby/telegram-nda-guard/domain/report_processor/denied_users_bot_kicker"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/report_processor/report_processor_multiplexor"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/report_processor/report_processor_send_admin_with_telegram_bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/session_storage/session_storage_file"
@@ -102,13 +103,31 @@ func main() {
 		channels[channel] = cachedAccessChecker
 	}
 	
-	reportProcessorDomain := report_processor_multiplexor.New(
-		logger,
+	reporters := []report_processor_multiplexor.UserReportProcessor{
 		report_processor_send_admin_with_telegram_bot.New(
 			telegramBotMessageSender,
 			options.ReportChannels,
 			logger,
 		),
+	}
+	
+	if options.AutoKickUsers{
+		reporters = append(
+			reporters,
+			denied_users_bot_kicker.New(
+				telegramBotDomain.GetBot(),
+				options.ReportChannels,
+				options.HideMessagesForKickedUsers,
+				options.KeepKickedUsersBanned,
+				options.KickUnknownUsers,
+				logger,
+			),
+		)
+	}
+	
+	reportProcessorDomain := report_processor_multiplexor.New(
+		logger,
+		reporters...,
 	)
 
 	exampleProcessorDomain := processor_access_control_demo.New(
