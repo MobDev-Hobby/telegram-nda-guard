@@ -3,6 +3,7 @@ package denied_users_bot_kicker
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/domain/report_processor"
 	"github.com/go-telegram/bot"
@@ -20,13 +21,22 @@ func (d *Domain) ProcessReport(
 		usersToClean = append(usersToClean, report.UnknownUsers...)
 	}
 
+	commandChatId := report.ChannelId
+	if commandChatId > 0 {
+		commandChatId, _ = strconv.ParseInt(
+			fmt.Sprintf("-100%d", report.ChannelId),
+			10,
+			64,
+		)
+	}
+
 	for _, user := range usersToClean {
 		success := true
 		if d.keepBanned || d.cleanMessages {
 			successBanned, err := d.botClient.BanChatMember(
 				ctx,
 				&bot.BanChatMemberParams{
-					ChatID:         report.ChannelId,
+					ChatID:         commandChatId,
 					UserID:         user.ID,
 					RevokeMessages: d.cleanMessages,
 				},
@@ -41,7 +51,7 @@ func (d *Domain) ProcessReport(
 			successKicked, err := d.botClient.UnbanChatMember(
 				ctx,
 				&bot.UnbanChatMemberParams{
-					ChatID:       report.ChannelId,
+					ChatID:       commandChatId,
 					UserID:       user.ID,
 					OnlyIfBanned: false,
 				},
@@ -57,8 +67,10 @@ func (d *Domain) ProcessReport(
 	}
 
 	message := fmt.Sprintf(
-		"Good users: %d. Tried to kick %d bad users, kicked %d bad users. Keep banned: %b. Clean messages: %b. Clean unknown: %b",
+		"Good users: %d. Unknown users: %d. Bad users: %d. Tried to kick %d bad users, kicked %d bad users. Keep banned: %b. Clean messages: %b. Clean unknown: %b",
 		len(report.AllowedUsers),
+		len(report.UnknownUsers),
+		len(report.DeniedUsers),
 		len(usersToClean),
 		cleanedUsers,
 		d.keepBanned,

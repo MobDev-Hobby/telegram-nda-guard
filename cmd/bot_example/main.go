@@ -86,7 +86,7 @@ func main() {
 	if err != nil {
 		logger.Panicf("can't init session storage: %s", err)
 	}
-	
+
 	telegramBotMessageSender := telegram_bot_send_message_ratelimited.New(
 		telegramBotDomain.GetBot(),
 		logger,
@@ -102,7 +102,7 @@ func main() {
 	for _, channel := range options.Channels {
 		channels[channel] = cachedAccessChecker
 	}
-	
+
 	reporters := []report_processor_multiplexor.UserReportProcessor{
 		report_processor_send_admin_with_telegram_bot.New(
 			telegramBotMessageSender,
@@ -110,8 +110,8 @@ func main() {
 			logger,
 		),
 	}
-	
-	if options.AutoKickUsers{
+
+	if options.AutoKickUsers {
 		reporters = append(
 			reporters,
 			denied_users_bot_kicker.New(
@@ -124,7 +124,7 @@ func main() {
 			),
 		)
 	}
-	
+
 	reportProcessorDomain := report_processor_multiplexor.New(
 		logger,
 		reporters...,

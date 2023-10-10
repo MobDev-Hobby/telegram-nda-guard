@@ -16,7 +16,7 @@ func (d *Domain) Run(
 	if err != nil {
 		return fmt.Errorf("can't run telegram bot: %v", err)
 	}
-
+	
 	d.telegramBot.GetBot().RegisterHandlerMatchFunc(
 		func(update *models.Update) bool {
 			if update.Message != nil &&
