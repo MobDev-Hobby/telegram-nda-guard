@@ -17,6 +17,7 @@ type Logger interface {
 }
 
 type RedisClient interface {
+	IsNil(err error) bool
 	Set(ctx context.Context, key string, value []byte, expiration time.Duration) error
 	Get(ctx context.Context, key string) ([]byte, error)
 }

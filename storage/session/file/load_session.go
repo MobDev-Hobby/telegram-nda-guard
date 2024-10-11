@@ -19,7 +19,7 @@ func (s *Domain) LoadSession(
 		_, err = os.Stat(s.getFileName(name))
 		if os.IsNotExist(err) {
 			s.log.Debugf("file not exists: %s", s.getFileName(name))
-			return nil, fmt.Errorf("file not exists: %s", name)
+			return []byte{}, nil
 		}
 		s.vals[name], err = os.ReadFile(s.getFileName(name))
 		if err != nil {

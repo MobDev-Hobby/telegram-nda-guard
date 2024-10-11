@@ -22,3 +22,7 @@ func (d *Domain) Get(ctx context.Context, key string) ([]byte, error) {
 func (d *Domain) Set(ctx context.Context, key string, data []byte, ttl time.Duration) error {
 	return d.Client.Set(ctx, key, data, ttl).Err()
 }
+
+func (d *Domain) IsNil(err error) bool {
+	return err == redis.Nil
+}

@@ -15,6 +15,10 @@ func (s *Domain) LoadSession(
 
 	result, err := s.redis.Get(ctx, s.getKeyName(name))
 	if err != nil {
+		if s.redis.IsNil(err) {
+			s.log.Debugf("session not found in redis: %s", name)
+			return []byte{}, nil
+		}
 		s.log.Errorf("redis read error: %s, %s", name, err)
 		return []byte{}, fmt.Errorf("read redis error: %w", err)
 	}

@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots"
 	"github.com/gotd/contrib/middleware/floodwait"
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/telegram/updates"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots"
 )
 
 func (d *Domain) Run(
@@ -77,7 +78,7 @@ func (d *Domain) Run(
 	select {
 	case err := <-clientLaunched:
 		if err != nil {
-			d.log.Errorf("user bot instance launch errr")
+			d.log.Errorf("user bot instance launch err: %v", err)
 			return err
 		}
 		d.log.Infof("user bot instance launched")

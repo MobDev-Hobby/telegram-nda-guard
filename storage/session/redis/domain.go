@@ -9,9 +9,9 @@ import (
 )
 
 type Domain struct {
-	log          Logger
-	redis        RedisClient
-	cryptor      cipher.Block
+	log     Logger
+	redis   RedisClient
+	cryptor cipher.Block
 	keyPrefix    string
 	randomReader io.Reader
 }
