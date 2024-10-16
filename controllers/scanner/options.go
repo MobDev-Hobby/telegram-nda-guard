@@ -93,3 +93,21 @@ func WithNProcessingThreads(threads int) func(*Domain) {
 		d.processingThreads = threads
 	}
 }
+
+func WithDefaultScanProcessor(processor UserReportProcessor) func(*Domain) {
+	return func(d *Domain) {
+		d.defaultScanProcessor = processor
+	}
+}
+
+func WithDefaultCleanProcessor(processor UserReportProcessor) func(*Domain) {
+	return func(d *Domain) {
+		d.defaultCleanProcessor = processor
+	}
+}
+
+func WithDefaultAccessChecker(checker CheckUserAccess) func(*Domain) {
+	return func(d *Domain) {
+		d.defaultAccessChecker = checker
+	}
+}

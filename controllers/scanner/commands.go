@@ -64,12 +64,33 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		d.cleanChannelHandler,
 	)
 
-	if d.adminUserChatID != 0 {
-		d.log.Debugf("Run userbot for user %d", d.adminUserChatID)
-		d.runUserBot(ctx)
-		d.log.Debugf("User bot launched")
-	} else {
-		d.log.Debugf("No userbot admin found want new")
+	if d.defaultCleanProcessor != nil && d.defaultAccessChecker != nil {
+		d.log.Debugf("Register /add handler")
+		d.telegramBot.RegisterHandler(
+			ctx,
+			func(update *guard.Update) bool {
+				if update.Message != nil &&
+					strings.HasPrefix(update.Message.Text, "/add") {
+
+					return true
+				}
+				return false
+			},
+			d.AddChannelHandler,
+		)
+		d.telegramBot.RegisterHandler(
+			ctx,
+			func(update *guard.Update) bool {
+				if update.Message != nil && update.Message.ChatShared != nil {
+					return true
+				}
+				return false
+			},
+			d.AddChannelCallbackHandler,
+		)
+	}
+
+	if d.adminUserChatID == 0 {
 		d.log.Debugf("Register /admin <code> handler")
 		d.telegramBot.RegisterHandler(
 			ctx,
@@ -84,9 +105,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			},
 			d.getSetAdminHandlerWithCallback(
 				func() {
-					d.log.Debugf("Run userbot for user %d", d.adminUserChatID)
-					d.runUserBot(ctx)
-					d.log.Debugf("User bot launched")
+					d.log.Debugf("New admin chat %d", d.adminUserChatID)
 				},
 			),
 		)

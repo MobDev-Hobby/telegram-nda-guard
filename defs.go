@@ -5,7 +5,8 @@ type User struct {
 	FirstName string
 	LastName  string
 	Username  string
-	Phone     string
+	Usernames []string
+	Phone     *string
 }
 
 type Permission int32
@@ -18,8 +19,8 @@ const (
 
 type ChannelInfo struct {
 	ID         int64
-	Title      string
 	MigratedTo *int64
+	Title      string
 }
 
 type Message struct {
@@ -29,6 +30,17 @@ type Message struct {
 	Text     string
 }
 
+type ChatShared struct {
+	ChatID    int64
+	RequestID int
+}
+
+type MessageReceived struct {
+	Message
+	ChatShared *ChatShared
+	User       User
+}
+
 type Update struct {
-	Message *Message
+	Message *MessageReceived
 }

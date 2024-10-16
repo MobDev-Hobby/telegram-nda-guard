@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
 )
 
 func (d *Domain) ProcessReport(
@@ -65,7 +66,7 @@ func (d *Domain) ProcessReport(
 	messages = append(messages, message.String())
 	message.Reset()
 
-	d.sendReportForChannel(ctx, report.Channel.ID, messages)
+	d.sendReportForChannel(ctx, report.Channel.ID, report.ReportChannels, messages)
 }
 
 func (d *Domain) listUsers(users []guard.User) []string {
@@ -94,10 +95,10 @@ func (d *Domain) getUserLink(user guard.User) string {
 			user.FirstName,
 			lastname,
 		)
-	} else if len(user.Phone) > 0 {
+	} else if user.Phone != nil {
 		return fmt.Sprintf(
 			" <a href=\"https://t.me/+%s\">%s%s</a>",
-			user.Phone,
+			*user.Phone,
 			user.FirstName,
 			lastname,
 		)
@@ -110,8 +111,8 @@ func (d *Domain) getUserLink(user guard.User) string {
 	)
 }
 
-func (d *Domain) sendReportForChannel(ctx context.Context, channelID int64, messages []string) {
-	for _, chatID := range d.reportChatIDs[channelID] {
+func (d *Domain) sendReportForChannel(ctx context.Context, channelID int64, reportChannels []int64, messages []string) {
+	for _, chatID := range reportChannels {
 		for _, message := range messages {
 			if len(messages) == 0 {
 				continue

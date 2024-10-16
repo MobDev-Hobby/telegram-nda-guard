@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
-	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 )
 
 func (d *Domain) ProcessReport(
@@ -93,8 +94,8 @@ func (d *Domain) ProcessReport(
 		d.cleanMessages,
 		d.cleanUnknown,
 	)
-	chatIDs := d.reportChatIDs[report.Channel.ID]
-	for _, chatID := range chatIDs {
+
+	for _, chatID := range report.ReportChannels {
 		_, err := d.botClient.SendMessage(
 			ctx,
 			&bot.SendMessageParams{

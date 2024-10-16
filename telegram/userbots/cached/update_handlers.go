@@ -3,8 +3,9 @@ package cached
 import (
 	"context"
 
-	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/gotd/td/tg"
+
+	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
 
 func (d *Domain) HandleNewChannelMessage(
@@ -97,7 +98,7 @@ func (d *Domain) addUserToCache(_ context.Context, user *tg.User, chatID int64) 
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
 			Username:  user.Username,
-			Phone:     user.Phone,
+			Phone:     &user.Phone,
 		}
 		d.cache.channelUsersCache[chatID] = cacheData
 	}

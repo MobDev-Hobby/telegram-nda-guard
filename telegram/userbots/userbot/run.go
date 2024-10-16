@@ -7,15 +7,11 @@ import (
 	"time"
 
 	"github.com/gotd/contrib/middleware/floodwait"
-	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/telegram/updates"
-
-	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots"
 )
 
 func (d *Domain) Run(
 	ctx context.Context,
-	authenticator userbots.Authenticator,
 ) error {
 
 	manager := updates.New(
@@ -39,22 +35,25 @@ func (d *Domain) Run(
 			ctx, func(ctx context.Context) error {
 				return d.userBot.client.Run(
 					ctx, func(ctx context.Context) error {
-						flow := auth.NewFlow(
-							authenticator,
-							auth.SendCodeOptions{},
-						)
-						if err := d.userBot.client.Auth().IfNecessary(ctx, flow); err != nil {
+
+						authData, err := d.userBot.client.Auth().Bot(ctx, d.apiKey)
+						if err != nil {
 							return fmt.Errorf("auth error: %w", err)
 						}
 
-						var err error
-						d.userBot.me, err = d.userBot.client.Self(ctx)
-						if err != nil {
-							return fmt.Errorf("call self error: %w", err)
+						d.log.Infof("auth data: %+v", authData)
+
+						botUser, valid := authData.User.AsNotEmpty()
+						if !valid {
+							d.userBot.me, err = d.userBot.client.Self(ctx)
+							if err != nil {
+								return fmt.Errorf("call self error: %w", err)
+							}
+						} else {
+							d.userBot.me = botUser
 						}
 
 						clientLaunched <- nil
-						authenticator.Done(ctx)
 
 						return manager.Run(
 							ctx, d.userBot.client.API(), d.userBot.me.ID, updates.AuthOptions{

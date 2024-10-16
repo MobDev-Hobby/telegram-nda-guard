@@ -19,6 +19,10 @@ func (d *Domain) Run(
 	}
 	d.log.Infof("Telegram bot launched")
 
+	d.log.Debugf("Run telegram user bot")
+	d.runUserBot(ctx)
+	d.log.Debugf("Telegram user bot launched")
+
 	d.log.Debugf("Setup telegram bot handlers")
 	d.setupCommands(ctx)
 	d.log.Debugf("Telegram bot handlers registered")
@@ -87,7 +91,6 @@ func (d *Domain) runUserBot(ctx context.Context) {
 	d.log.Debugf("Start user bot initialization")
 	err := d.userBot.Run(
 		ctx,
-		d.NewBotAuthFlow(ctx, d.adminUserChatID),
 	)
 	d.log.Debugf("User bot initialization finished")
 	if err != nil {

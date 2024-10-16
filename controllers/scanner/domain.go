@@ -18,15 +18,20 @@ type Domain struct {
 
 	processingThreads int
 
-	commandChannels   map[int64][]int64
-	protectedChannels map[int64]ProtectedChannel
-	channels          map[int64]ChannelInfo
+	commandChannels    map[int64][]int64
+	protectedChannels  map[int64]ProtectedChannel
+	channels           map[int64]ChannelInfo
+	addChannelHandlers map[int]int64
 
 	accessCheckInterval     time.Duration
 	channelAutoScanInterval time.Duration
 	taskDelayInterval       time.Duration
 
 	processRequestChan chan ScanRequest
+
+	defaultScanProcessor  UserReportProcessor
+	defaultCleanProcessor UserReportProcessor
+	defaultAccessChecker  CheckUserAccess
 
 	tickerCasesMutex    sync.Mutex
 	tickerCases         []reflect.SelectCase
@@ -52,9 +57,10 @@ func New(
 		channelAutoScanInterval: 6 * time.Hour,
 		taskDelayInterval:       10 * time.Second,
 
-		commandChannels:   make(map[int64][]int64),
-		protectedChannels: make(map[int64]ProtectedChannel),
-		channels:          make(map[int64]ChannelInfo),
+		commandChannels:    make(map[int64][]int64),
+		protectedChannels:  make(map[int64]ProtectedChannel),
+		channels:           make(map[int64]ChannelInfo),
+		addChannelHandlers: make(map[int]int64),
 
 		processRequestChan: make(chan ScanRequest, 10),
 	}

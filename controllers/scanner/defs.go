@@ -8,11 +8,10 @@ type ChannelInfo struct {
 	botOnChannel      bool
 	botCanInvite      bool
 	botCanClean       bool
-	userBotOnChannel  bool
 }
 
 func (ci *ChannelInfo) CanScan() bool {
-	return ci.userBotOnChannel
+	return ci.botOnChannel
 }
 
 func (ci *ChannelInfo) CanClean() bool {

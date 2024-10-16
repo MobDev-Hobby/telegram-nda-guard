@@ -5,7 +5,6 @@ import (
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
-	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots"
 )
 
 type Logger interface {
@@ -27,16 +26,11 @@ type CheckUserAccess interface {
 type UserBot interface {
 	Run(
 		ctx context.Context,
-		authenticator userbots.Authenticator,
 	) error
 	GetChannelUsers(
 		ctx context.Context,
 		channelID int64,
 	) ([]guard.User, error)
-	JoinChannelByInviteLink(
-		ctx context.Context,
-		link string,
-	) error
 	UserID() int64
 	Username() string
 }
@@ -55,6 +49,7 @@ type TelegramBot interface {
 	) string
 	ClearHandler(string)
 	SendMessage(ctx context.Context, message *guard.Message) error
+	SendAddChannelButton(ctx context.Context, message *guard.Message, id int32, buttonText string) error
 	CheckAccessUser(ctx context.Context, channelID int64, userID int64, options ...guard.Permission) (
 		bool,
 		map[guard.Permission]bool,

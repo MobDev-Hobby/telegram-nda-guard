@@ -7,9 +7,6 @@ import (
 	"os"
 	"os/signal"
 
-	filestorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/file"
-	redisstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis"
-	goredisadapter "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis/drivers/go-redis"
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
 	goredis "github.com/redis/go-redis/v9"
@@ -20,6 +17,9 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/kicker"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/reporter"
+	filestorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/file"
+	redisstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis"
+	goredisadapter "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis/drivers/go-redis"
 	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/bots/bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/sender/ratelimited"
 	cacheduserbot "github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots/cached"
@@ -94,6 +94,7 @@ func main() {
 	userBotDomain := userbot.New(
 		options.TelegramAppID,
 		options.TelegramAppKey,
+		options.TelegramBotKey,
 		sessionStorageDomain,
 		userbot.WithLogger(logger.Named("user-bot")),
 	)
@@ -130,13 +131,11 @@ func main() {
 
 	scanReporter := reporter.New(
 		telegramBotMessageSender,
-		commandChannels,
 		reporter.WithLogger(logger.Named("scan-report-processor")),
 	)
 
 	cleanReporter := kicker.New(
 		telegramBotDomain.GetBot(),
-		commandChannels,
 		kicker.WithLogger(logger.Named("clean-report-processor")),
 		kicker.WithCleanMessages(options.HideMessagesForKickedUsers),
 		kicker.WithKeepBanned(options.KeepKickedUsersBanned),
@@ -168,6 +167,9 @@ func main() {
 		scanner.WithChannelAutoScanInterval(options.ChannelScanInterval),
 		scanner.WithCheckAccessInterval(options.AccessCheckInterval),
 		scanner.WithChannels(channels),
+		scanner.WithDefaultScanProcessor(scanReporter),
+		scanner.WithDefaultCleanProcessor(cleanReporter),
+		scanner.WithDefaultAccessChecker(cachedAccessChecker),
 	)
 
 	err = ProtectorControllerDomain.Run(ctx)

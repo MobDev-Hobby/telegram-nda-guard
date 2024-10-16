@@ -9,6 +9,7 @@ import (
 type Domain struct {
 	log            Logger
 	sessionStorage SessionStorage
+	apiKey         string
 	userBot        *UserBotInstance
 }
 
@@ -21,6 +22,7 @@ type UserBotInstance struct {
 func New(
 	appID int,
 	appKey string,
+	apiKey string,
 	sessionStorage SessionStorage,
 	opts ...UserBotOption,
 ) *Domain {
@@ -30,6 +32,7 @@ func New(
 	d := &Options{
 		name: "example_bot",
 		Domain: &Domain{
+			apiKey:         apiKey,
 			log:            Logger(zap.NewNop().Sugar()),
 			sessionStorage: sessionStorage,
 		},

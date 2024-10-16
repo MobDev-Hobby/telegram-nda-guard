@@ -42,12 +42,6 @@ func (d *Domain) CheckRights(ctx context.Context) error {
 		return err
 	}
 
-	err = d.updateUserBotAccessRights(ctx)
-	if err != nil {
-		d.log.Errorf("Unable to get access rights: %v", err)
-		return err
-	}
-
 	return nil
 }
 

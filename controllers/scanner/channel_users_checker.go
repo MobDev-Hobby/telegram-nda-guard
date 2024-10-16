@@ -8,7 +8,6 @@ import (
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
-	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 )
 
 func (d *Domain) CheckPermissions(_ context.Context, request ScanRequest) error {
@@ -101,9 +100,10 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 	}
 
 	if d.channels[request.channelInfo.id].migratedFrom != nil {
-		report.Channel.ID = *d.channels[request.channelInfo.id].migratedFrom
-		report.Channel.MigratedTo = utils.Ptr(d.channels[request.channelInfo.id].id)
+		report.Channel.ID = request.channelInfo.id
 	}
+
+	report.ReportChannels = d.protectedChannels[request.channelInfo.id].CommandChannelIDs
 
 	if err != nil {
 		d.log.Errorf("can't get users: %s", err)
@@ -111,14 +111,22 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 	}
 
 	checker := request.accessChecker
+	if checker == nil {
+		d.log.Infof("No access checker specified, skip")
+		return
+	}
 	for _, user := range users {
 		user := user
 		hasAccess, err := checker.HasAccess(ctx, &user)
+		phone := ""
+		if user.Phone != nil {
+			phone = *user.Phone
+		}
 		d.log.Infof(
-			"User ID %d, username %s, phone %s, firstname %s, lastname %s, access %v, channel %d",
+			"User ID %d, username %s, phone %s, firstname %s, lastname %s, access %t, channel %d",
 			user.ID,
 			user.Username,
-			user.Phone,
+			phone,
 			user.FirstName,
 			user.LastName,
 			hasAccess,

@@ -3,19 +3,38 @@ package bot
 import (
 	"context"
 
-	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+
+	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
 
 func castUpdate(update *models.Update) *guard.Update {
 	matchUpdate := &guard.Update{}
 	if update.Message != nil {
-		matchUpdate.Message = &guard.Message{
-			ChatID:   update.Message.Chat.ID,
-			ChatType: string(update.Message.Chat.Type),
-			Text:     update.Message.Text,
-			ThreadID: &update.Message.MessageThreadID,
+
+		var chatShared *guard.ChatShared
+		if update.Message.ChatShared != nil {
+			chatShared = &guard.ChatShared{
+				ChatID:    update.Message.ChatShared.ChatID,
+				RequestID: int(update.Message.ChatShared.RequestID),
+			}
+		}
+
+		matchUpdate.Message = &guard.MessageReceived{
+			Message: guard.Message{
+				ChatID:   update.Message.Chat.ID,
+				ChatType: string(update.Message.Chat.Type),
+				Text:     update.Message.Text,
+				ThreadID: &update.Message.MessageThreadID,
+			},
+			User: guard.User{
+				ID:        update.Message.From.ID,
+				Username:  update.Message.From.Username,
+				FirstName: update.Message.From.FirstName,
+				LastName:  update.Message.From.LastName,
+			},
+			ChatShared: chatShared,
 		}
 	}
 	return matchUpdate

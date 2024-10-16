@@ -3,9 +3,9 @@ package cached
 import (
 	"context"
 
-	guard "github.com/MobDev-Hobby/telegram-nda-guard"
-	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots"
 	"github.com/gotd/td/tg"
+
+	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
 
 type Logger interface {
@@ -19,16 +19,11 @@ type Logger interface {
 type UserBot interface {
 	Run(
 		ctx context.Context,
-		authenticator userbots.Authenticator,
 	) error
 	GetChannelUsers(
 		ctx context.Context,
 		channelID int64,
 	) ([]guard.User, error)
-	JoinChannelByInviteLink(
-		ctx context.Context,
-		link string,
-	) error
 	UserID() int64
 	Username() string
 	GetDispatcher() tg.UpdateDispatcher

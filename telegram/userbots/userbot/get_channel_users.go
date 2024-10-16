@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/gotd/td/tg"
+
+	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
 
 func (d *Domain) GetChannelUsers(
@@ -57,6 +58,12 @@ func (d *Domain) GetChannelUsers(
 					for _, userObj := range participants.Users {
 						user, ok := userObj.(*tg.User)
 						if user != nil && ok {
+
+							usernames := []string{}
+							for _, username := range user.Usernames {
+								usernames = append(usernames, username.Username)
+							}
+
 							users = append(
 								users,
 								guard.User{
@@ -64,7 +71,8 @@ func (d *Domain) GetChannelUsers(
 									Username:  user.Username,
 									FirstName: user.FirstName,
 									LastName:  user.LastName,
-									Phone:     user.Phone,
+									Phone:     &user.Phone,
+									Usernames: usernames,
 								},
 							)
 						}

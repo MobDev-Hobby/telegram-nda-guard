@@ -5,21 +5,18 @@ import (
 )
 
 type Domain struct {
-	log           Logger
-	botClient     TelegramBotMessageSender
-	reportChatIDs map[int64][]int64
+	log       Logger
+	botClient TelegramBotMessageSender
 }
 
 func New(
 	botClient TelegramBotMessageSender,
-	reportChatIDs map[int64][]int64, // channelID => reportChannelID
 	opts ...Option,
 ) *Domain {
 
 	d := &Domain{
-		log:           Logger(zap.NewNop().Sugar()),
-		botClient:     botClient,
-		reportChatIDs: reportChatIDs,
+		log:       Logger(zap.NewNop().Sugar()),
+		botClient: botClient,
 	}
 
 	for _, opt := range opts {
