@@ -23,11 +23,24 @@ type ChannelInfo struct {
 	Title      string
 }
 
+type InlineButton struct {
+	Text    string
+	Command string
+}
+
+type Button struct {
+	ID             int32
+	Text           string
+	RequestChannel *bool
+}
+
 type Message struct {
-	ChatType string
-	ChatID   int64
-	ThreadID *int
-	Text     string
+	ChatType      string
+	ChatID        int64
+	ThreadID      *int
+	Text          string
+	InlineButtons [][]InlineButton
+	Buttons       [][]Button
 }
 
 type ChatShared struct {
@@ -42,5 +55,18 @@ type MessageReceived struct {
 }
 
 type Update struct {
+	Message       *MessageReceived
+	CallbackQuery *CallbackQuery
+}
+
+type CallbackQuery struct {
+	ID      string
+	Data    string
 	Message *MessageReceived
+}
+
+type CallbackResponse struct {
+	ID        string
+	Text      string
+	ShowAlert bool
 }

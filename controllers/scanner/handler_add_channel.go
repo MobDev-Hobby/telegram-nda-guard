@@ -18,15 +18,23 @@ func (d *Domain) AddChannelHandler(
 	requestId := int32(update.Message.ChatID*1000 + time.Now().UnixNano())
 	d.addChannelHandlers[int(requestId)] = update.Message.ChatID
 
-	err := d.telegramBot.SendAddChannelButton(
+	requestChannel := true
+	err := d.telegramBot.SendMessage(
 		ctx,
 		&guard.Message{
 			ChatID:   update.Message.ChatID,
 			ThreadID: update.Message.ThreadID,
 			Text:     "Press button to add protected channel",
+			Buttons: [][]guard.Button{
+				{
+					{
+						Text:           "Select channel",
+						ID:             int32(requestId),
+						RequestChannel: &requestChannel,
+					},
+				},
+			},
 		},
-		int32(requestId),
-		"Select channel",
 	)
 
 	if err != nil {
@@ -60,6 +68,7 @@ func (d *Domain) AddChannelCallbackHandler(
 				ChatID:   update.Message.ChatID,
 				ThreadID: update.Message.ThreadID,
 				Text:     "Unexpected channel, use /add please",
+				Buttons:  d.getDefaultButtons(),
 			},
 		)
 
@@ -75,14 +84,15 @@ func (d *Domain) AddChannelCallbackHandler(
 
 	d.log.Debugf("processed get ID for chat: %d", update.Message.ChatID)
 
-	err := d.AddProtectedChannel(&ProtectedChannel{
-		ID:                   update.Message.ChatShared.ChatID,
-		AutoScan:             true,
-		CommandChannelIDs:    []int64{update.Message.ChatID},
-		ScanReportProcessor:  d.defaultScanProcessor,
-		CleanReportProcessor: d.defaultCleanProcessor,
-		AccessChecker:        d.defaultAccessChecker,
-	})
+	protectedChannel := &ProtectedChannel{
+		ID:                update.Message.ChatShared.ChatID,
+		CommandChannelIDs: []int64{update.Message.ChatID},
+		AutoScan:          true,
+		AllowClean:        true,
+	}
+	err := d.AddDefaultProtectedChannel(
+		protectedChannel,
+	)
 
 	if err != nil {
 		d.log.Errorf("can't add protected channel: %s", err)
@@ -98,17 +108,53 @@ func (d *Domain) AddChannelCallbackHandler(
 
 	chanInfo := d.channels[update.Message.ChatShared.ChatID]
 
+	var buttons []guard.InlineButton
+
+	if chanInfo.CanScan() {
+		buttons = append(
+			buttons,
+			guard.InlineButton{
+				Text:    "/scan",
+				Command: fmt.Sprintf("/scan %d", chanInfo.id),
+			},
+		)
+	}
+	if chanInfo.CanClean() && protectedChannel.AllowClean {
+		buttons = append(
+			buttons,
+			guard.InlineButton{
+				Text:    "/clean",
+				Command: fmt.Sprintf("/clean %d", chanInfo.id),
+			},
+		)
+	}
+
+	err = d.telegramBot.SendMessage(
+		ctx,
+		&guard.Message{
+			ChatID:   update.Message.ChatID,
+			ThreadID: update.Message.ThreadID,
+			Text:     "Wait...",
+			Buttons:  d.getDefaultButtons(),
+		},
+	)
+
+	if err != nil {
+		d.log.Errorf("can't send message: %s", err)
+	}
+
 	err = d.telegramBot.SendMessage(
 		ctx,
 		&guard.Message{
 			ChatID:   update.Message.ChatID,
 			ThreadID: update.Message.ThreadID,
 			Text: fmt.Sprintf(
-				"Channel <b>%s</b> added! \nCheck permissions:\n • /scan - %t\n • /clean - %t",
+				"Channel <b>%s</b> added! \nCheck permissions:\n • Scan - %t\n • Clean - %t",
 				chanInfo.title,
 				chanInfo.CanScan(),
-				chanInfo.CanClean(),
+				chanInfo.CanClean() && protectedChannel.AllowClean,
 			),
+			InlineButtons: [][]guard.InlineButton{buttons},
 		},
 	)
 

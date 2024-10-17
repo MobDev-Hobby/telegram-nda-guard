@@ -7,6 +7,11 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 )
 
+type ProtectedChannelStorage interface {
+	LoadAll(ctx context.Context) ([]ProtectedChannel, error)
+	Store(*ProtectedChannel) error
+}
+
 type Logger interface {
 	Panicf(template string, args ...any)
 	Errorf(template string, args ...any)
@@ -49,7 +54,6 @@ type TelegramBot interface {
 	) string
 	ClearHandler(string)
 	SendMessage(ctx context.Context, message *guard.Message) error
-	SendAddChannelButton(ctx context.Context, message *guard.Message, id int32, buttonText string) error
 	CheckAccessUser(ctx context.Context, channelID int64, userID int64, options ...guard.Permission) (
 		bool,
 		map[guard.Permission]bool,
@@ -59,4 +63,5 @@ type TelegramBot interface {
 		bool,
 		error,
 	)
+	CallbackResponse(ctx context.Context, response guard.CallbackResponse)
 }

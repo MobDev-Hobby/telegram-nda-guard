@@ -11,23 +11,76 @@ import (
 )
 
 func (d *Domain) SendMessage(ctx context.Context, message *guard.Message) error {
-	_, err := d.botClient.SendMessage(
-		ctx, &bot.SendMessageParams{
-			ChatID:          message.ChatID,
-			Text:            message.Text,
-			ParseMode:       models.ParseModeHTML,
-			MessageThreadID: utils.UnPtr(message.ThreadID),
-			LinkPreviewOptions: &models.LinkPreviewOptions{
-				IsDisabled: utils.Ptr(false),
-			},
+
+	tgMessage := &bot.SendMessageParams{
+		ChatID:          message.ChatID,
+		Text:            message.Text,
+		ParseMode:       models.ParseModeHTML,
+		MessageThreadID: utils.UnPtr(message.ThreadID),
+		LinkPreviewOptions: &models.LinkPreviewOptions{
+			IsDisabled: utils.Ptr(false),
 		},
+	}
+
+	var inlineButtons [][]models.InlineKeyboardButton
+	for _, buttonsLine := range message.InlineButtons {
+		buttonsRow := []models.InlineKeyboardButton{}
+		for _, button := range buttonsLine {
+			buttonsRow = append(buttonsRow, models.InlineKeyboardButton{
+				Text:         button.Text,
+				CallbackData: button.Command,
+			})
+		}
+		inlineButtons = append(inlineButtons, buttonsRow)
+	}
+	if len(inlineButtons) > 0 {
+		tgMessage.ReplyMarkup = &models.InlineKeyboardMarkup{
+			InlineKeyboard: inlineButtons,
+		}
+	}
+
+	var buttons [][]models.KeyboardButton
+	for _, buttonsLine := range message.Buttons {
+		buttonsRow := []models.KeyboardButton{}
+		for _, button := range buttonsLine {
+			buttonEntity := models.KeyboardButton{
+				Text: button.Text,
+			}
+			if button.RequestChannel != nil && *button.RequestChannel {
+				buttonEntity.RequestChat = d.sendAddChannelButton(ctx, button.ID)
+			}
+			buttonsRow = append(buttonsRow, buttonEntity)
+		}
+		buttons = append(buttons, buttonsRow)
+	}
+	if len(buttons) > 0 {
+		tgMessage.ReplyMarkup = &models.ReplyKeyboardMarkup{
+			Keyboard: buttons,
+		}
+	}
+
+	needClean := false
+	if tgMessage.Text == "" {
+		needClean = true
+		tgMessage.Text = "Processing..."
+	}
+	msg, err := d.botClient.SendMessage(
+		ctx, tgMessage,
 	)
+
+	if needClean {
+		_, _ = d.botClient.DeleteMessage(ctx, &bot.DeleteMessageParams{
+			ChatID:    tgMessage.ChatID,
+			MessageID: msg.ID,
+		})
+	}
+
 	return err
 }
 
-func (d *Domain) SendAddChannelButton(ctx context.Context, message *guard.Message, id int32, buttonText string) error {
+func (d *Domain) sendAddChannelButton(_ context.Context, id int32) *models.KeyboardButtonRequestChat {
 
-	request := models.KeyboardButtonRequestChat{
+	return &models.KeyboardButtonRequestChat{
 		RequestID: id,
 		UserAdministratorRights: &models.ChatAdministratorRights{
 			CanManageChat:      true,
@@ -41,23 +94,4 @@ func (d *Domain) SendAddChannelButton(ctx context.Context, message *guard.Messag
 			CanRestrictMembers: true,
 		},
 	}
-
-	button := &models.KeyboardButton{
-		Text:        buttonText,
-		RequestChat: &request,
-	}
-
-	_, err := d.botClient.SendMessage(
-		ctx, &bot.SendMessageParams{
-			ChatID:          message.ChatID,
-			Text:            message.Text,
-			ParseMode:       models.ParseModeHTML,
-			MessageThreadID: utils.UnPtr(message.ThreadID),
-			LinkPreviewOptions: &models.LinkPreviewOptions{
-				IsDisabled: utils.Ptr(false),
-			},
-			ReplyMarkup: models.ReplyKeyboardMarkup{Keyboard: [][]models.KeyboardButton{{*button}}},
-		},
-	)
-	return err
 }

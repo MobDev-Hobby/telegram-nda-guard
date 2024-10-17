@@ -9,34 +9,49 @@ import (
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
 
+func castMessage(message *models.Message) *guard.MessageReceived {
+	var chatShared *guard.ChatShared
+	if message.ChatShared != nil {
+		chatShared = &guard.ChatShared{
+			ChatID:    message.ChatShared.ChatID,
+			RequestID: int(message.ChatShared.RequestID),
+		}
+	}
+
+	return &guard.MessageReceived{
+		Message: guard.Message{
+			ChatID:   message.Chat.ID,
+			ChatType: string(message.Chat.Type),
+			Text:     message.Text,
+			ThreadID: &message.MessageThreadID,
+		},
+		User: guard.User{
+			ID:        message.From.ID,
+			Username:  message.From.Username,
+			FirstName: message.From.FirstName,
+			LastName:  message.From.LastName,
+		},
+		ChatShared: chatShared,
+	}
+}
+
 func castUpdate(update *models.Update) *guard.Update {
 	matchUpdate := &guard.Update{}
 	if update.Message != nil {
+		matchUpdate.Message = castMessage(update.Message)
+	}
 
-		var chatShared *guard.ChatShared
-		if update.Message.ChatShared != nil {
-			chatShared = &guard.ChatShared{
-				ChatID:    update.Message.ChatShared.ChatID,
-				RequestID: int(update.Message.ChatShared.RequestID),
-			}
+	if update.CallbackQuery != nil {
+		matchUpdate.CallbackQuery = &guard.CallbackQuery{
+			ID:   update.CallbackQuery.ID,
+			Data: update.CallbackQuery.Data,
 		}
 
-		matchUpdate.Message = &guard.MessageReceived{
-			Message: guard.Message{
-				ChatID:   update.Message.Chat.ID,
-				ChatType: string(update.Message.Chat.Type),
-				Text:     update.Message.Text,
-				ThreadID: &update.Message.MessageThreadID,
-			},
-			User: guard.User{
-				ID:        update.Message.From.ID,
-				Username:  update.Message.From.Username,
-				FirstName: update.Message.From.FirstName,
-				LastName:  update.Message.From.LastName,
-			},
-			ChatShared: chatShared,
+		if update.CallbackQuery.Message.Message != nil {
+			matchUpdate.CallbackQuery.Message = castMessage(update.CallbackQuery.Message.Message)
 		}
 	}
+
 	return matchUpdate
 }
 func (d *Domain) RegisterHandler(
@@ -57,4 +72,14 @@ func (d *Domain) RegisterHandler(
 
 func (d *Domain) ClearHandler(id string) {
 	d.botClient.UnregisterHandler(id)
+}
+
+func (d *Domain) CallbackResponse(ctx context.Context, response guard.CallbackResponse) {
+	d.botClient.AnswerCallbackQuery(
+		ctx,
+		&bot.AnswerCallbackQueryParams{
+			CallbackQueryID: response.ID,
+			Text:            response.Text,
+			ShowAlert:       response.ShowAlert,
+		})
 }

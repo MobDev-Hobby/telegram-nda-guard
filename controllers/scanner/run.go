@@ -12,6 +12,24 @@ func (d *Domain) Run(
 	ctx context.Context,
 ) error {
 
+	if d.storage != nil {
+		if d.storage != nil &&
+			(d.defaultAccessChecker == nil || d.defaultCleanProcessor == nil || d.defaultScanProcessor == nil) {
+			return fmt.Errorf("you must set default access checker, default clean processor and default scan processor while using storage")
+		}
+		protectedChannels, err := d.storage.LoadAll(ctx)
+		if err != nil {
+			return fmt.Errorf("can't load protected channels list: %w", err)
+		}
+		for _, protectedChannel := range protectedChannels {
+			protectedChannel := protectedChannel
+			protectedChannel.CleanReportProcessor = d.defaultCleanProcessor
+			protectedChannel.ScanReportProcessor = d.defaultScanProcessor
+			protectedChannel.AccessChecker = d.defaultAccessChecker
+			d.AddDefaultProtectedChannel(&protectedChannel)
+		}
+	}
+
 	d.log.Debugf("Run telegram bot")
 	err := d.telegramBot.Run(ctx)
 	if err != nil {
@@ -81,7 +99,8 @@ func (d *Domain) notifySuccessRun(ctx context.Context) {
 				ChatID: commandChannelID,
 				Text: "Hello!\nFew channels linked to this control channel:\n" +
 					strings.Join(channels, "\n") +
-					"\n\nYou could use /scan and /clean commands here to perform actions.",
+					"\n\nUse /help to see all commands",
+				Buttons: d.getDefaultButtons(),
 			},
 		)
 	}

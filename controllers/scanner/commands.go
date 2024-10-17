@@ -36,6 +36,21 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		d.retryHandler,
 	)
 
+	d.log.Debugf("Register /start and /help handlers")
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.Message != nil &&
+				(strings.HasPrefix(update.Message.Text, "/start") ||
+					strings.HasPrefix(update.Message.Text, "/help")) {
+
+				return true
+			}
+			return false
+		},
+		d.startHandler,
+	)
+
 	d.log.Debugf("Register /scan handler")
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -48,6 +63,18 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			return false
 		},
 		d.checkChannelHandler,
+	)
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
+				strings.HasPrefix(update.CallbackQuery.Data, "/scan") {
+
+				return true
+			}
+			return false
+		},
+		d.processScanCallbackHandler,
 	)
 
 	d.log.Debugf("Register /clean handler")
@@ -62,6 +89,32 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			return false
 		},
 		d.cleanChannelHandler,
+	)
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
+				strings.HasPrefix(update.CallbackQuery.Data, "/clean") {
+
+				return true
+			}
+			return false
+		},
+		d.processCleanCallbackHandler,
+	)
+
+	d.log.Debugf("Register /list handler")
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.Message != nil &&
+				strings.HasPrefix(update.Message.Text, "/list") {
+
+				return true
+			}
+			return false
+		},
+		d.ListChannelsHandler,
 	)
 
 	if d.defaultCleanProcessor != nil && d.defaultAccessChecker != nil {

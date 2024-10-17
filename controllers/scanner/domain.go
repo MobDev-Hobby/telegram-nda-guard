@@ -12,6 +12,7 @@ type Domain struct {
 	telegramBot TelegramBot
 	userBot     UserBot
 	log         Logger
+	storage     ProtectedChannelStorage
 
 	adminUserChatID int64
 	setAdminHash    *string

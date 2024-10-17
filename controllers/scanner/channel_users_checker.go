@@ -89,6 +89,11 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		request.channelInfo.id,
 	)
 
+	if err != nil {
+		d.log.Errorf("can't get users: %s", err)
+		return
+	}
+
 	report := processors.AccessReport{
 		Channel: guard.ChannelInfo{
 			ID:    request.channelInfo.id,
@@ -103,11 +108,15 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		report.Channel.ID = request.channelInfo.id
 	}
 
-	report.ReportChannels = d.protectedChannels[request.channelInfo.id].CommandChannelIDs
-
-	if err != nil {
-		d.log.Errorf("can't get users: %s", err)
-		return
+	if request.reportChannels != nil {
+		report.ReportChannels = *request.reportChannels
+	} else {
+		protectedChannel, ok := d.protectedChannels[request.channelInfo.id]
+		if !ok {
+			d.log.Errorf("protected channel for channel %d not found", request.channelInfo.id)
+			return
+		}
+		report.ReportChannels = protectedChannel.CommandChannelIDs
 	}
 
 	checker := request.accessChecker

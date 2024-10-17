@@ -42,6 +42,7 @@ const (
 type ScanRequest struct {
 	requestType     ScanRequestType
 	channelInfo     ChannelInfo
+	reportChannels  *[]int64
 	accessChecker   CheckUserAccess
 	reportProcessor UserReportProcessor
 }
