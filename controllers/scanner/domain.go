@@ -14,8 +14,9 @@ type Domain struct {
 	log         Logger
 	storage     ProtectedChannelStorage
 
-	adminUserChatID int64
-	setAdminHash    *string
+	adminUserChatID        int64
+	setAdminHash           *string
+	withCommonLaunchNotify bool
 
 	processingThreads int
 

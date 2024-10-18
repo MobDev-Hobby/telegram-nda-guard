@@ -22,7 +22,13 @@ func (d *Domain) Run(
 			return fmt.Errorf("can't load protected channels list: %w", err)
 		}
 		for _, protectedChannel := range protectedChannels {
-			protectedChannel := protectedChannel
+			protectedChannel := ProtectedChannel{
+				ID:                protectedChannel.ID,
+				CommandChannelIDs: protectedChannel.CommandChannelIDs,
+				AutoScan:          protectedChannel.AutoScan,
+				AutoClean:         protectedChannel.AutoClean,
+				AllowClean:        protectedChannel.AllowClean,
+			}
 			protectedChannel.CleanReportProcessor = d.defaultCleanProcessor
 			protectedChannel.ScanReportProcessor = d.defaultScanProcessor
 			protectedChannel.AccessChecker = d.defaultAccessChecker
@@ -69,40 +75,42 @@ func (d *Domain) notifySuccessRun(ctx context.Context) {
 		"Bot initialization completed",
 	)
 
-	for commandChannelID, controlledChannels := range d.commandChannels {
-		channels := make([]string, 0, len(controlledChannels))
-		for _, channelID := range controlledChannels {
-			protectedChannel, ok := d.protectedChannels[channelID]
-			if !ok {
-				continue
+	if d.withCommonLaunchNotify {
+		for commandChannelID, controlledChannels := range d.commandChannels {
+			channels := make([]string, 0, len(controlledChannels))
+			for _, channelID := range controlledChannels {
+				protectedChannel, ok := d.protectedChannels[channelID]
+				if !ok {
+					continue
+				}
+
+				title := fmt.Sprintf("%d", channelID)
+				channel, ok := d.channels[channelID]
+				if ok {
+					title = channel.title
+				}
+				channels = append(
+					channels,
+					fmt.Sprintf(
+						"\n• <b>%s</b>\n \t • Auto scan: <b>%t</b>\n \t • Auto clean: <b>%t</b>\n \t • Manual clean: <b>%t</b>\n",
+						title,
+						protectedChannel.AutoClean,
+						protectedChannel.AutoScan,
+						protectedChannel.AllowClean,
+					),
+				)
 			}
 
-			title := fmt.Sprintf("%d", channelID)
-			channel, ok := d.channels[channelID]
-			if ok {
-				title = channel.title
-			}
-			channels = append(
-				channels,
-				fmt.Sprintf(
-					"\n• <b>%s</b>\n \t • Auto scan: <b>%t</b>\n \t • Auto clean: <b>%t</b>\n \t • Manual clean: <b>%t</b>\n",
-					title,
-					protectedChannel.AutoClean,
-					protectedChannel.AutoScan,
-					protectedChannel.AllowClean,
-				),
+			_ = d.telegramBot.SendMessage(
+				ctx, &guard.Message{
+					ChatID: commandChannelID,
+					Text: "Hello!\nFew channels linked to this control channel:\n" +
+						strings.Join(channels, "\n") +
+						"\n\nUse /help to see all commands",
+					Buttons: d.getDefaultButtons(),
+				},
 			)
 		}
-
-		_ = d.telegramBot.SendMessage(
-			ctx, &guard.Message{
-				ChatID: commandChannelID,
-				Text: "Hello!\nFew channels linked to this control channel:\n" +
-					strings.Join(channels, "\n") +
-					"\n\nUse /help to see all commands",
-				Buttons: d.getDefaultButtons(),
-			},
-		)
 	}
 }
 

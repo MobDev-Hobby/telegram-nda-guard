@@ -1,11 +1,14 @@
 package scanner
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"time"
 
 	"github.com/robfig/cron/v3"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/channels"
 )
 
 type TickerOption func(opts *TickerOptions) error
@@ -78,7 +81,15 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 	}
 
 	if d.storage != nil {
-		err := d.storage.Store(channel)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		err := d.storage.Store(ctx, &channels.ProtectedChannel{
+			ID:                   channel.ID,
+			CommandChannelIDs:    channel.CommandChannelIDs,
+			AutoScan:             channel.AutoScan,
+			AutoClean:            channel.AutoClean,
+			AllowClean:           channel.AllowClean,
+		})
 		if err != nil {
 			return err
 		}

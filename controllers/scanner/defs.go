@@ -24,9 +24,9 @@ type ProtectedChannel struct {
 	AutoScan             bool
 	AutoClean            bool
 	AllowClean           bool
-	AccessChecker        CheckUserAccess
-	ScanReportProcessor  UserReportProcessor
-	CleanReportProcessor UserReportProcessor
+	AccessChecker        CheckUserAccess     `json:",omitempty"`
+	ScanReportProcessor  UserReportProcessor `json:",omitempty"`
+	CleanReportProcessor UserReportProcessor `json:",omitempty"`
 }
 
 type ScanRequestType int

@@ -111,3 +111,15 @@ func WithDefaultAccessChecker(checker CheckUserAccess) func(*Domain) {
 		d.defaultAccessChecker = checker
 	}
 }
+
+func WithCommonLaunchNotify() func(*Domain) {
+	return func(d *Domain) {
+		d.withCommonLaunchNotify = true
+	}
+}
+
+func WithStorage(storage ProtectedChannelStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.storage = storage
+	}
+}

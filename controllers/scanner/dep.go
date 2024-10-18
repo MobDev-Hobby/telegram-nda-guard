@@ -5,11 +5,12 @@ import (
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/channels"
 )
 
 type ProtectedChannelStorage interface {
-	LoadAll(ctx context.Context) ([]ProtectedChannel, error)
-	Store(*ProtectedChannel) error
+	LoadAll(ctx context.Context) ([]channels.ProtectedChannel, error)
+	Store(ctx context.Context, protectedChannel *channels.ProtectedChannel) error
 }
 
 type Logger interface {

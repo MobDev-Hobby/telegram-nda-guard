@@ -17,9 +17,10 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/kicker"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/reporter"
+	redischanstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/channels/redis"
+	goredisadapter "github.com/MobDev-Hobby/telegram-nda-guard/storage/drivers/go-redis"
 	filestorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/file"
 	redisstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis"
-	goredisadapter "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis/drivers/go-redis"
 	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/bots/bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/sender/ratelimited"
 	cacheduserbot "github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots/cached"
@@ -61,8 +62,8 @@ func main() {
 		logger.Panicf("can't init crypto provider: %s", err)
 	}
 
-	var sessionStorageDomain userbot.SessionStorage
-	if options.UseRedisSessionStorage {
+	var redisClient *goredisadapter.Domain
+	if options.RedisHost != "" {
 		redisConnect := goredis.NewClient(
 			&goredis.Options{
 				Addr: options.RedisHost,
@@ -71,7 +72,14 @@ func main() {
 		if redisConnect == nil {
 			logger.Panicf("can't init redis: %s", err)
 		}
-		redisClient := goredisadapter.New(redisConnect)
+		redisClient = goredisadapter.New(redisConnect)
+	}
+
+	var sessionStorageDomain userbot.SessionStorage
+	if options.UseRedisSessionStorage {
+		if redisClient == nil {
+			logger.Panicf("can't init redis: %s", err)
+		}
 
 		sessionStorageDomain, err = redisstorage.New(
 			cryptoProvider,
@@ -158,9 +166,7 @@ func main() {
 		)
 	}
 
-	ProtectorControllerDomain := scanner.New(
-		telegramBotDomain,
-		cachedUserBotDomain,
+	controllerOptions := []scanner.ProcessorOption{
 		scanner.WithLogger(logger),
 		scanner.WithOwnerChatID(options.AdminChatID),
 		scanner.WithSetAdminKey(options.AdminSecret),
@@ -170,6 +176,20 @@ func main() {
 		scanner.WithDefaultScanProcessor(scanReporter),
 		scanner.WithDefaultCleanProcessor(cleanReporter),
 		scanner.WithDefaultAccessChecker(cachedAccessChecker),
+	}
+
+	if redisClient != nil {
+		storage, err := redischanstorage.New(redisClient)
+		if err != nil {
+			logger.Panicf("can't init storage: %s", err)
+		}
+		controllerOptions = append(controllerOptions, scanner.WithStorage(storage))
+	}
+
+	ProtectorControllerDomain := scanner.New(
+		telegramBotDomain,
+		cachedUserBotDomain,
+		controllerOptions...,
 	)
 
 	err = ProtectorControllerDomain.Run(ctx)
