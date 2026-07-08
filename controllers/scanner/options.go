@@ -123,3 +123,17 @@ func WithStorage(storage ProtectedChannelStorage) func(*Domain) {
 		d.storage = storage
 	}
 }
+
+// WithAuthorizer injects a command authorization strategy. When not provided,
+// the controller uses an allow-all authorizer (backwards-compatible with the
+// pre-authorization behavior, where any member of a controlling chat could run
+// commands). Passing a custom Authorizer (e.g. the bundled HybridAuthorizer)
+// restricts who can run protected commands. See NewHybridAuthorizer.
+func WithAuthorizer(authorizer Authorizer) func(*Domain) {
+	if authorizer == nil {
+		panic("authorizer is nil")
+	}
+	return func(d *Domain) {
+		d.authorizer = authorizer
+	}
+}

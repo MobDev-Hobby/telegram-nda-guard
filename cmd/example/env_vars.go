@@ -21,4 +21,8 @@ type environmentConfig struct {
 	KickUnknownUsers           bool            `env:"KICK_UNKNOWN_USERS"`
 	UseRedisSessionStorage     bool            `env:"USE_REDIS_SESSION_STORAGE"`
 	RedisHost                  string          `env:"REDIS_HOST"`
+	// RequireAdminAuth, when true, restricts bot commands to the owner and to
+	// administrators of the controlling chat. When false (default), commands
+	// remain open to all members (backwards-compatible).
+	RequireAdminAuth bool `env:"REQUIRE_ADMIN_AUTH"`
 }

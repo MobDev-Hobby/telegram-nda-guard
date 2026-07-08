@@ -15,6 +15,7 @@ import (
 	cachedchecker "github.com/MobDev-Hobby/telegram-nda-guard/checker/cached"
 	demochecker "github.com/MobDev-Hobby/telegram-nda-guard/checker/demo"
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner"
+	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner/authorizer"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/kicker"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/reporter"
 	redischanstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/channels/redis"
@@ -176,6 +177,22 @@ func main() {
 		scanner.WithDefaultScanProcessor(scanReporter),
 		scanner.WithDefaultCleanProcessor(cleanReporter),
 		scanner.WithDefaultAccessChecker(cachedAccessChecker),
+	}
+
+	// Authorization: when requested, restrict commands to the owner and to the
+	// administrators of the controlling chat. Otherwise commands stay open to
+	// all members (backwards-compatible default).
+	if options.RequireAdminAuth {
+		authorizerOpts := []authorizer.Option{
+			authorizer.WithOwner(options.AdminChatID),
+			authorizer.WithRequireAdmin(),
+			authorizer.WithLogger(logger.Named("authorizer")),
+		}
+		controllerOptions = append(
+			controllerOptions,
+			scanner.WithAuthorizer(authorizer.New(telegramBotDomain, authorizerOpts...)),
+		)
+		logger.Infof("Command authorization enabled (owner + chat admins)")
 	}
 
 	if redisClient != nil {

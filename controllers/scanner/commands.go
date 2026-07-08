@@ -62,60 +62,60 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.checkChannelHandler,
+		d.requireAuth(d.checkChannelHandler),
 	)
-	d.telegramBot.RegisterHandler(
-		ctx,
-		func(update *guard.Update) bool {
-			if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
-				strings.HasPrefix(update.CallbackQuery.Data, "/scan") {
+		d.telegramBot.RegisterHandler(
+			ctx,
+			func(update *guard.Update) bool {
+				if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
+					strings.HasPrefix(update.CallbackQuery.Data, "/scan") {
 
-				return true
-			}
-			return false
-		},
-		d.processScanCallbackHandler,
-	)
+					return true
+				}
+				return false
+			},
+			d.requireAuth(d.processScanCallbackHandler),
+		)
 
-	d.log.Debugf("Register /clean handler")
-	d.telegramBot.RegisterHandler(
-		ctx,
-		func(update *guard.Update) bool {
-			if update.Message != nil &&
-				strings.HasPrefix(update.Message.Text, "/clean") {
+		d.log.Debugf("Register /clean handler")
+		d.telegramBot.RegisterHandler(
+			ctx,
+			func(update *guard.Update) bool {
+				if update.Message != nil &&
+					strings.HasPrefix(update.Message.Text, "/clean") {
 
-				return true
-			}
-			return false
-		},
-		d.cleanChannelHandler,
-	)
-	d.telegramBot.RegisterHandler(
-		ctx,
-		func(update *guard.Update) bool {
-			if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
-				strings.HasPrefix(update.CallbackQuery.Data, "/clean") {
+					return true
+				}
+				return false
+			},
+			d.requireAuth(d.cleanChannelHandler),
+		)
+		d.telegramBot.RegisterHandler(
+			ctx,
+			func(update *guard.Update) bool {
+				if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
+					strings.HasPrefix(update.CallbackQuery.Data, "/clean") {
 
-				return true
-			}
-			return false
-		},
-		d.processCleanCallbackHandler,
-	)
+					return true
+				}
+				return false
+			},
+			d.requireAuth(d.processCleanCallbackHandler),
+		)
 
-	d.log.Debugf("Register /list handler")
-	d.telegramBot.RegisterHandler(
-		ctx,
-		func(update *guard.Update) bool {
-			if update.Message != nil &&
-				strings.HasPrefix(update.Message.Text, "/list") {
+		d.log.Debugf("Register /list handler")
+		d.telegramBot.RegisterHandler(
+			ctx,
+			func(update *guard.Update) bool {
+				if update.Message != nil &&
+					strings.HasPrefix(update.Message.Text, "/list") {
 
-				return true
-			}
-			return false
-		},
-		d.ListChannelsHandler,
-	)
+					return true
+				}
+				return false
+			},
+			d.requireAuth(d.ListChannelsHandler),
+		)
 
 	if d.defaultCleanProcessor != nil && d.defaultAccessChecker != nil {
 		d.log.Debugf("Register /add handler")
@@ -129,7 +129,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 				}
 				return false
 			},
-			d.AddChannelHandler,
+			d.requireAuth(d.AddChannelHandler),
 		)
 		d.telegramBot.RegisterHandler(
 			ctx,

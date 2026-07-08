@@ -13,6 +13,7 @@ type Domain struct {
 	userBot     UserBot
 	log         Logger
 	storage     ProtectedChannelStorage
+	authorizer  Authorizer
 
 	adminUserChatID        int64
 	setAdminHash           *string
