@@ -31,6 +31,10 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ### Added
 
+- **Channel removal UI.** New `/remove <id>` command with a two-step inline
+  confirmation (`/rmconfirm <id>`). Detaching a channel is now possible from the
+  bot; previously `CleanProtectedChannel` existed but was dead code. Removal is
+  refused unless the originating chat actually controls the channel.
 - `scanner.ProtectedChannelStorage.Drop(ctx, channelID int64) error` — removes
   a protected channel's persisted record. `CleanProtectedChannel` now calls
   `Drop` when a channel is fully detached (no remaining controlling chats) and
