@@ -103,6 +103,9 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		AllowedUsers: []guard.User{},
 		DeniedUsers:  []guard.User{},
 		UnknownUsers: []guard.User{},
+		// Forward per-channel clean options so the cleaner can apply them
+		// instead of its process-wide defaults. Nil means "use defaults".
+		CleanOptions: request.cleanOptions,
 	}
 
 	if d.channels[request.channelInfo.id].migratedFrom != nil {
@@ -211,6 +214,7 @@ func (d *Domain) RunUserAccessChecker(ctx context.Context) {
 					channelInfo:     channel,
 					accessChecker:   protectedChannel.AccessChecker,
 					reportProcessor: protectedChannel.CleanReportProcessor,
+					cleanOptions:    protectedChannel.CleanOptions,
 				}
 			}
 		}

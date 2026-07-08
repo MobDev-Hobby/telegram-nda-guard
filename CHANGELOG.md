@@ -31,6 +31,16 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ### Added
 
+- `processors.CleanOptions` (`KeepBanned`, `CleanMessages`, `CleanUnknown`) and
+  an optional `AccessReport.CleanOptions` field, so cleanup behavior can be
+  configured per-channel instead of only process-wide.
+- `kicker.UserRestrictor` — a transport-agnostic domain interface
+  (`SendReportMessage`, `Ban`, `Unban`) that the kicker consumes. The bundled
+  `telegram/bots/bot.Domain` implements it (`Ban`/`Unban`/`SendReportMessage`),
+  including the Bot API `-100` chat-ID normalization that previously lived
+  inside the kicker.
+- `scanner.ProtectedChannel.CleanOptions` (`*processors.CleanOptions`) —
+  per-channel cleanup overrides forwarded into the cleaner's `AccessReport`.
 - `guard.ChannelInfo.Type` (`string`) — the Telegram chat type, plus
   `ChatType*` constants (`ChatTypePrivate`, `ChatTypeGroup`,
   `ChatTypeSupergroup`, `ChatTypeChannel`) and a `guard.ChatTypeNoun(type)`
@@ -43,10 +53,42 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
 
+### Changed
+
+- **`kicker.New` now takes a `UserRestrictor` instead of `*bot.Bot`.** The
+  kicker no longer imports `github.com/go-telegram/bot`; it operates purely on
+  domain types. Per-channel `CleanOptions` (when present) override the
+  kicker's process-wide defaults.
+- `kicker.TelegramBotUserKicker` is **removed** in favor of `UserRestrictor`.
+
+### Fixed
+
+- `cmd/example/main.go` called `kicker.WithKeepBanned(options.KickUnknownUsers)`
+  twice; the second call should have been `kicker.WithCleanUnknown(...)`, so the
+  "kick unknown users" flag was silently ignored. Fixed.
+
 ### Migration
 
-No action required for consumers at this point. This entry only formalizes the
-changelog going forward.
+- **`kicker.New(restrictor UserRestrictor, opts...)`** — callers that passed
+  `telegramBotDomain.GetBot()` (`*bot.Bot`) must now pass the bot **domain**
+  (`telegramBotDomain`), which implements `UserRestrictor`:
+  ```go
+  // before
+  kicker.New(telegramBotDomain.GetBot(), ...)
+  // after
+  kicker.New(telegramBotDomain, ...)
+  ```
+- Any custom type passed to the kicker must implement the new
+  `UserRestrictor` interface (`SendReportMessage`, `Ban`, `Unban`). The old
+  `TelegramBotUserKicker` interface (`SendMessage`/`BanChatMember`/`UnbanChatMember`
+  with `go-telegram/bot` params) is gone.
+- Optional: to enable per-channel cleanup behavior, set
+  `scanner.ProtectedChannel.CleanOptions`. Otherwise the kicker's configured
+  defaults apply as before.
+
+### Previous (changelog formalization)
+
+No action required for consumers at this point beyond the changes above.
 
 ---
 

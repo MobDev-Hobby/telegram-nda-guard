@@ -143,11 +143,11 @@ func main() {
 	)
 
 	cleanReporter := kicker.New(
-		telegramBotDomain.GetBot(),
+		telegramBotDomain,
 		kicker.WithLogger(logger.Named("clean-report-processor")),
 		kicker.WithCleanMessages(options.HideMessagesForKickedUsers),
 		kicker.WithKeepBanned(options.KeepKickedUsersBanned),
-		kicker.WithKeepBanned(options.KickUnknownUsers),
+		kicker.WithCleanUnknown(options.KickUnknownUsers),
 	)
 
 	channels := make([]scanner.ProtectedChannel, 0, len(options.Channels))

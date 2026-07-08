@@ -145,6 +145,7 @@ func (d *Domain) scanChannelHandler(
 			accessChecker:   protectedChannel.AccessChecker,
 			reportProcessor: reportProcessor,
 			reportChannels:  &[]int64{commandChannelID},
+			cleanOptions:    protectedChannel.CleanOptions,
 		}
 	}
 

@@ -3,14 +3,9 @@ package kicker
 import (
 	"context"
 	"fmt"
-	"strconv"
-
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
-	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 )
 
 func (d *Domain) ProcessReport(
@@ -18,56 +13,44 @@ func (d *Domain) ProcessReport(
 	report processors.AccessReport,
 ) {
 
+	// Per-channel options override the process-wide defaults when present.
+	keepBanned := d.keepBanned
+	cleanMessages := d.cleanMessages
+	cleanUnknown := d.cleanUnknown
+	if report.CleanOptions != nil {
+		keepBanned = report.CleanOptions.KeepBanned
+		cleanMessages = report.CleanOptions.CleanMessages
+		cleanUnknown = report.CleanOptions.CleanUnknown
+	}
+
 	usersToClean := report.DeniedUsers
 	cleanedUsers := 0
-	if d.cleanUnknown {
+	if cleanUnknown {
 		usersToClean = append(usersToClean, report.UnknownUsers...)
 	}
 
-	commandChatID := report.Channel.ID
-	if commandChatID > 0 {
-		commandChatID, _ = strconv.ParseInt(
-			fmt.Sprintf("-100%d", report.Channel.ID),
-			10,
-			64,
-		)
+	// The channel the user should be restricted in. When a chat migrated to a
+	// supergroup, the new ID is authoritative; the UserRestrictor is then
+	// responsible for any transport-specific normalization of that ID.
+	channelToBan := report.Channel.ID
+	if report.Channel.MigratedTo != nil {
+		channelToBan = *report.Channel.MigratedTo
 	}
 
 	success := true
 	for _, user := range usersToClean {
-		chanToBanUser := commandChatID
-		if report.Channel.MigratedTo != nil {
-			chanToBanUser = *report.Channel.MigratedTo
+		if keepBanned || cleanMessages {
+			if err := d.restrictor.Ban(ctx, channelToBan, user.ID, cleanMessages); err != nil {
+				d.log.Errorf("can't ban user: %s. Error: %s", user.Username, err.Error())
+				success = false
+			}
 		}
 
-		if d.keepBanned || d.cleanMessages {
-			successBanned, err := d.botClient.BanChatMember(
-				ctx,
-				&bot.BanChatMemberParams{
-					ChatID:         chanToBanUser,
-					UserID:         user.ID,
-					RevokeMessages: d.cleanMessages,
-				},
-			)
-			if err != nil {
-				d.log.Errorf("can't send ban user: %s. Error: %s", user.Username, err.Error())
+		if !keepBanned {
+			if err := d.restrictor.Unban(ctx, channelToBan, user.ID); err != nil {
+				d.log.Errorf("can't unban user: %s. Error: %s", user.Username, err.Error())
+				success = false
 			}
-			success = success && successBanned
-		}
-
-		if !d.keepBanned {
-			successKicked, err := d.botClient.UnbanChatMember(
-				ctx,
-				&bot.UnbanChatMemberParams{
-					ChatID:       chanToBanUser,
-					UserID:       user.ID,
-					OnlyIfBanned: false,
-				},
-			)
-			if err != nil {
-				d.log.Errorf("can't send ban user: %s. Error: %s", user.Username, err.Error())
-			}
-			success = success && successKicked
 		}
 		if success {
 			cleanedUsers++
@@ -92,24 +75,13 @@ func (d *Domain) ProcessReport(
 		len(report.DeniedUsers),
 		cleanedUsers,
 		len(usersToClean),
-		d.keepBanned,
-		d.cleanMessages,
-		d.cleanUnknown,
+		keepBanned,
+		cleanMessages,
+		cleanUnknown,
 	)
 
 	for _, chatID := range report.ReportChannels {
-		_, err := d.botClient.SendMessage(
-			ctx,
-			&bot.SendMessageParams{
-				ChatID:    chatID,
-				Text:      message,
-				ParseMode: models.ParseModeHTML,
-				LinkPreviewOptions: &models.LinkPreviewOptions{
-					IsDisabled: utils.Ptr(true),
-				},
-			},
-		)
-		if err != nil {
+		if err := d.restrictor.SendReportMessage(ctx, chatID, message); err != nil {
 			d.log.Errorf("can't send message: %s. Message text: %s", err, message)
 		}
 	}

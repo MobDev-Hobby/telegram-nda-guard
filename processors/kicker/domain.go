@@ -5,21 +5,24 @@ import (
 )
 
 type Domain struct {
-	log           Logger
-	botClient     TelegramBotUserKicker
+	log        Logger
+	restrictor UserRestrictor
+	// cleanMessages, keepBanned and cleanUnknown are the process-wide defaults.
+	// They are used when an AccessReport does not carry per-channel
+	// CleanOptions. Per-channel CleanOptions take precedence.
 	cleanMessages bool
 	keepBanned    bool
 	cleanUnknown  bool
 }
 
 func New(
-	botClient TelegramBotUserKicker,
+	restrictor UserRestrictor,
 	opts ...Option,
 ) *Domain {
 
 	d := &Domain{
 		log:           Logger(zap.NewNop().Sugar()),
-		botClient:     botClient,
+		restrictor:    restrictor,
 		keepBanned:    false,
 		cleanMessages: true,
 		cleanUnknown:  false,
