@@ -23,11 +23,12 @@ func (d *Domain) ProcessReport(
 
 	_, err := message.WriteString(
 		fmt.Sprintf(
-			"<b>Scan report for chat %s</b>"+
+			"<b>Scan report for %s %s</b>"+
 				"\n\n<b>Users:</b>"+
 				"\n• Good: <b>%d</b>"+
 				"\n• Unknown: <b>%d</b>"+
 				"\n• Bad: <b>%d</b>\n",
+			guard.ChatTypeNoun(report.Channel.Type),
 			report.Channel.Title,
 			len(report.AllowedUsers),
 			len(report.UnknownUsers),

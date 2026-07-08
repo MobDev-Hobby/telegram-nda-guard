@@ -98,6 +98,7 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		Channel: guard.ChannelInfo{
 			ID:    request.channelInfo.id,
 			Title: request.channelInfo.title,
+			Type:  request.channelInfo.chatType,
 		},
 		AllowedUsers: []guard.User{},
 		DeniedUsers:  []guard.User{},

@@ -56,6 +56,7 @@ func (d *Domain) updateChannelInfo(ctx context.Context) error {
 		if channel != nil {
 			channelInfo := d.channels[channelID]
 			channelInfo.title = channel.Title
+			channelInfo.chatType = channel.Type
 			d.channels[channelID] = channelInfo
 
 			if channel.MigratedTo != nil {

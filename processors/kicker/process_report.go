@@ -8,6 +8,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 )
@@ -74,7 +75,7 @@ func (d *Domain) ProcessReport(
 	}
 
 	message := fmt.Sprintf(
-		"<b>Clean report for chat %s</b>"+
+		"<b>Clean report for %s %s</b>"+
 			"\n\n<b>Users:</b>"+
 			"\n• Good: <b>%d</b>"+
 			"\n• Unknown: <b>%d</b>"+
@@ -84,6 +85,7 @@ func (d *Domain) ProcessReport(
 			"• Keep banned: <b>%t</b>. \n"+
 			"• Clean messages: <b>%t</b>. \n"+
 			"• Clean unknown: <b>%t</b>",
+		guard.ChatTypeNoun(report.Channel.Type),
 		report.Channel.Title,
 		len(report.AllowedUsers),
 		len(report.UnknownUsers),

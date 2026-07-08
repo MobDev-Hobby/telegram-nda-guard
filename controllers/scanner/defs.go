@@ -5,6 +5,7 @@ type ChannelInfo struct {
 	id                int64
 	commandChannelIDs []int64
 	title             string
+	chatType          string
 	botOnChannel      bool
 	botCanInvite      bool
 	botCanClean       bool
