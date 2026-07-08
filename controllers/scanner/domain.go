@@ -24,6 +24,10 @@ type Domain struct {
 	protectedChannels  map[int64]ProtectedChannel
 	channels           map[int64]ChannelInfo
 	addChannelHandlers map[int]int64
+	// channelsMutex guards commandChannels, protectedChannels and channels
+	// against concurrent mutation from command handlers (e.g. /add, /settings
+	// toggles, /remove) while the ticker loop and access checker iterate them.
+	channelsMutex sync.RWMutex
 
 	accessCheckInterval     time.Duration
 	channelAutoScanInterval time.Duration

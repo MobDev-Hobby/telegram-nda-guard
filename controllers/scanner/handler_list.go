@@ -81,6 +81,16 @@ func (d *Domain) ListChannelsHandler(
 					},
 				)
 			}
+
+			// Settings is always available so operators can tune flags even
+			// before the bot has confirmed scan/clean rights.
+			buttons = append(
+				buttons,
+				guard.InlineButton{
+					Text:    "⚙",
+					Command: fmt.Sprintf("/settings %d", channelID),
+				},
+			)
 		}
 
 		err = d.telegramBot.SendMessage(

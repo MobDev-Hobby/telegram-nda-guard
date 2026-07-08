@@ -117,6 +117,46 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		d.ListChannelsHandler,
 	)
 
+	d.log.Debugf("Register /settings handlers")
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.Message != nil &&
+				strings.HasPrefix(update.Message.Text, "/settings") {
+
+				return true
+			}
+			return false
+		},
+		d.SettingsHandler,
+	)
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
+				strings.HasPrefix(update.CallbackQuery.Data, "/settings") {
+
+				return true
+			}
+			return false
+		},
+		d.SettingsChannelHandler,
+	)
+
+	d.log.Debugf("Register /setflag handler")
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
+				strings.HasPrefix(update.CallbackQuery.Data, "/setflag") {
+
+				return true
+			}
+			return false
+		},
+		d.ToggleFlagHandler,
+	)
+
 	if d.defaultCleanProcessor != nil && d.defaultAccessChecker != nil {
 		d.log.Debugf("Register /add handler")
 		d.telegramBot.RegisterHandler(
