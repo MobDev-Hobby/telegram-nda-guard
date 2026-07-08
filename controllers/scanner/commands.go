@@ -117,6 +117,32 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		d.ListChannelsHandler,
 	)
 
+	d.log.Debugf("Register /users handlers")
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.Message != nil &&
+				strings.HasPrefix(update.Message.Text, "/users") {
+
+				return true
+			}
+			return false
+		},
+		d.UsersHandler,
+	)
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
+				strings.HasPrefix(update.CallbackQuery.Data, "/users") {
+
+				return true
+			}
+			return false
+		},
+		d.UsersHandler,
+	)
+
 	if d.defaultCleanProcessor != nil && d.defaultAccessChecker != nil {
 		d.log.Debugf("Register /add handler")
 		d.telegramBot.RegisterHandler(
