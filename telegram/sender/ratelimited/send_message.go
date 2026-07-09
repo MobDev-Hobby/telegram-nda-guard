@@ -3,11 +3,9 @@ package ratelimited
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"golang.org/x/time/rate"
 )
 
 func (d *Domain) SendMessage(
@@ -25,21 +23,15 @@ func (d *Domain) SendMessage(
 	if !ok {
 		return nil, errors.New("chatID is not int64")
 	}
-	if limit, found := d.rateLimitByChannelID[chatID]; found {
-		d.log.Debugf("Wait channel %d rate limiter", chatID)
-		if err := limit.Wait(ctx); err != nil {
-			return nil, err
-		}
-		d.log.Debugf("Allowed by channel %d rate limiter", chatID)
-	} else {
-		// Telegram limit is 20 messages for 1 chat per minute,
-		// take 15 for time window inconsistency risk
-		// https://core.telegram.org/bots/faq#my-bot-is-hitting-limits-how-do-i-avoid-this
-		d.rateLimitByChannelID[chatID] = rate.NewLimiter(
-			rate.Every(1*time.Minute),
-			15,
-		)
+	// Always apply the per-chat limiter. Previously the first message to a
+	// chat only created the limiter but skipped Wait, bypassing the 20
+	// msg/min guard for the very first message of every chat.
+	limit := d.getLimiter(chatID)
+	d.log.Debugf("Wait channel %d rate limiter", chatID)
+	if err := limit.Wait(ctx); err != nil {
+		return nil, err
 	}
+	d.log.Debugf("Allowed by channel %d rate limiter", chatID)
 
 	return d.botClient.SendMessage(ctx, params)
 }

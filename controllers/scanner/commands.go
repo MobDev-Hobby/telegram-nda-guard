@@ -186,6 +186,32 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		d.UsersHandler,
 	)
 
+	d.log.Debugf("Register /remove handlers")
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.Message != nil &&
+				strings.HasPrefix(update.Message.Text, "/remove") {
+
+				return true
+			}
+			return false
+		},
+		d.RemoveChannelHandler,
+	)
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool {
+			if update.CallbackQuery != nil && update.CallbackQuery.Message != nil &&
+				strings.HasPrefix(update.CallbackQuery.Data, "/rmconfirm") {
+
+				return true
+			}
+			return false
+		},
+		d.RemoveConfirmHandler,
+	)
+
 	if d.defaultCleanProcessor != nil && d.defaultAccessChecker != nil {
 		d.log.Debugf("Register /add handler")
 		d.telegramBot.RegisterHandler(

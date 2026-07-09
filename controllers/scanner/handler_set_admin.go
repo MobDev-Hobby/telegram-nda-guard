@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"crypto/subtle"
 	"strings"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
@@ -22,7 +23,11 @@ func (d *Domain) getSetAdminHandlerWithCallback(
 		d.log.Debugf("process set admin for chat: %d", update.Message.ChatID)
 
 		command := strings.Split(update.Message.Text, " ")
-		if len(command) < 2 || d.setAdminHash == nil || command[1] != *d.setAdminHash {
+		// Compare in constant time to avoid a timing side-channel on the
+		// admin secret. The previous `!=` short-circuited on the first
+		// differing byte.
+		if len(command) < 2 || d.setAdminHash == nil ||
+			subtle.ConstantTimeCompare([]byte(command[1]), []byte(*d.setAdminHash)) != 1 {
 			err := d.telegramBot.SendMessage(
 				ctx, &guard.Message{
 					ChatID:   update.Message.ChatID,

@@ -31,8 +31,6 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ### Added
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 - `guard.ChannelInfo.Type` (`string`) — the Telegram chat type, plus
   `ChatType*` constants (`ChatTypePrivate`, `ChatTypeGroup`,
   `ChatTypeSupergroup`, `ChatTypeChannel`) and a `guard.ChatTypeNoun(type)`
@@ -66,30 +64,20 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   admin check.
 - `REQUIRE_ADMIN_AUTH` env var in `cmd/example` to opt into owner+admin
   authorization (off by default for backwards compatibility).
-=======
 - **Channel settings UI.** New `/settings` command and `/settings <id>` +
-  `/setflag <id> <flag>` inline-button callbacks that let operators toggle
-  `AutoScan`, `AutoClean` and `AllowClean` per channel at runtime. Changes are
-  persisted via the storage layer and the periodic ticker is registered/removed
-  in sync (no restart needed). `/list` now shows a ⚙ button per channel.
-- `Domain.channelsMutex` (`sync.RWMutex`) guards the in-memory channel maps
-  (`commandChannels`, `protectedChannels`, `channels`) against concurrent
-  mutation from command handlers.
-- `Domain.channelHasTicker(channelID)` helper.
->>>>>>> glm/settings-ui
-=======
-- **Channel users view.** New `/users <id>` command (message and inline-button
-  callback) that lists a channel's members, classified into Good / Unknown / Bad
-  by the channel's access checker — a read-only on-demand counterpart to
-  `/scan`. Large listings are truncated per-section with a hint to run `/scan`
-  for a full persisted report. `/list` now shows a `/users` button per channel.
->>>>>>> glm/users-view
+  `/setflag <id> <flag>` inline-button callbacks that toggle `AutoScan`,
+  `AutoClean`, `AllowClean` per channel at runtime, persisted and synced with
+  the periodic ticker. `/list` now shows a ⚙ button per channel.
+- **Channel users view.** New `/users <id>` command (message and inline-button)
+  listing a channel's members classified into Good / Unknown / Bad. `/list`
+  shows a `/users` button per channel.
+- **Channel removal UI.** New `/remove <id>` command with a two-step inline
+  confirmation (`/rmconfirm <id>`). Detaching a channel is now possible from
+  the bot; previously `CleanProtectedChannel` existed but was dead code.
 - Established this `CHANGELOG.md` and the migration-note convention documented
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ### Security
 
 - Previously **any member of a controlling chat** could run `/scan`, `/clean`,
@@ -142,24 +130,6 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   `telegram/bots/bot.Domain` already provides it.
 - Optional, non-breaking: to restrict who can run commands, pass
   `scanner.WithAuthorizer(...)`. Without it, behavior is unchanged.
-=======
-### Notes
-
-- The toggle handlers are registered as plain callbacks on this branch. When
-  combined with the authorization subsystem (GLM-3), they should additionally be
-  wrapped in `Domain.requireAuth` so only authorized operators can change
-  settings.
-
-=======
->>>>>>> glm/users-view
-### Migration
-
-No action required for consumers at this point. This entry only formalizes the
-changelog going forward.
-<<<<<<< HEAD
->>>>>>> glm/settings-ui
-=======
->>>>>>> glm/users-view
 
 ---
 
