@@ -63,27 +63,35 @@ func (d *Domain) ProcessReport(
 // cleanUser bans then (optionally) unbans a single user. Returns true when the
 // user was removed from the channel. The bot client is expected to be
 // rate-limited and to handle Telegram FLOOD_WAIT (429) internally; chat-id
-// normalization (-100 prefix) and OnlyIfBanned handling live in the wrapped
-// restrictor, so the kicker deals only in logical channel ids.
+// normalization (-100 prefix) lives in the wrapped restrictor, so the kicker
+// deals only in logical channel ids.
 func (d *Domain) cleanUser(
 	ctx context.Context,
 	channel guard.ChannelInfo,
 	user guard.User,
 ) bool {
 
+	// A ban is issued when we either keep the user banned or want message
+	// cleanup (ban+unban is how Telegram deletes the user's recent messages).
+	wasBanned := false
 	if d.keepBanned || d.cleanMessages {
 		if err := d.botClient.Ban(ctx, channel.ID, user.ID, d.cleanMessages); err != nil {
 			d.log.Errorf("can't ban user %s: %s", user.Username, err)
 			return false
 		}
+		wasBanned = true
 	}
 
 	if !d.keepBanned {
-		// OnlyIfBanned:true is applied inside the restrictor client, so when
-		// the ban step did not take effect the unban is a no-op instead of an
-		// error. Previously OnlyIfBanned:false produced a misleading
-		// "USER_NOT_PARTICIPANT" error logged (wrongly) as "can't send ban".
-		if err := d.botClient.Unban(ctx, channel.ID, user.ID); err != nil {
+		// OnlyIfBanned must reflect whether the ban step ran:
+		//   - keepBanned=false && cleanMessages=true  -> ban-then-unban to
+		//     clean messages; only_if_banned=true avoids a spurious error if
+		//     the ban did not register in time.
+		//   - keepBanned=false && cleanMessages=false -> the ban step was
+		//     skipped, so we must call unban with only_if_banned=false to
+		//     actually remove the member (this is the "kick" path). Using
+		//     true here would be a no-op and leave the user in the chat.
+		if err := d.botClient.Unban(ctx, channel.ID, user.ID, wasBanned); err != nil {
 			d.log.Errorf("can't unban user %s: %s", user.Username, err)
 			return false
 		}

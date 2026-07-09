@@ -17,6 +17,6 @@ type Logger interface {
 // reliable way to get the bot account restricted or banned.
 type TelegramBotUserKicker interface {
 	Ban(ctx context.Context, channelID, userID int64, revokeMessages bool) error
-	Unban(ctx context.Context, channelID, userID int64) error
+	Unban(ctx context.Context, channelID, userID int64, onlyIfBanned bool) error
 	SendReport(ctx context.Context, chatID int64, text string) error
 }

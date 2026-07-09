@@ -15,7 +15,7 @@ import (
 // via its Ban/Unban/SendReportMessage methods.
 type UserRestrictor interface {
 	Ban(ctx context.Context, channelID, userID int64, revokeMessages bool) error
-	Unban(ctx context.Context, channelID, userID int64) error
+	Unban(ctx context.Context, channelID, userID int64, onlyIfBanned bool) error
 	SendReportMessage(ctx context.Context, chatID int64, text string) error
 }
 
@@ -79,20 +79,22 @@ func (r *Restrictor) Ban(ctx context.Context, channelID, userID int64, revokeMes
 	return err
 }
 
-// Unban throttles and then lifts the ban on userID in channelID. It retries
-// once on a 429. OnlyIfBanned:true is applied inside the wrapped client so a
-// preceding failed ban does not produce a spurious error.
-func (r *Restrictor) Unban(ctx context.Context, channelID, userID int64) error {
+// Unban throttles and then lifts the ban on (or removes) userID in channelID.
+// onlyIfBanned is forwarded to Telegram: when true the call is a no-op unless
+// the user is banned (avoids a spurious error after a failed ban); when false
+// it removes a current member — the mechanism the kicker uses to kick without
+// keeping the ban. It retries once on a 429.
+func (r *Restrictor) Unban(ctx context.Context, channelID, userID int64, onlyIfBanned bool) error {
 	if err := r.rateLimit.Wait(ctx); err != nil {
 		return err
 	}
-	err := r.botClient.Unban(ctx, channelID, userID)
+	err := r.botClient.Unban(ctx, channelID, userID, onlyIfBanned)
 	if retryAfter, ok := floodWaitSeconds(err); ok {
 		r.log.Warnf("Unban FLOOD_WAIT, sleeping %ds before retry", retryAfter)
 		if !sleepOrCancel(ctx, r.retryTimeout(retryAfter)) {
 			return ctx.Err()
 		}
-		return r.botClient.Unban(ctx, channelID, userID)
+		return r.botClient.Unban(ctx, channelID, userID, onlyIfBanned)
 	}
 	return err
 }

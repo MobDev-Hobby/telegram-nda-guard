@@ -41,10 +41,13 @@ func (d *Domain) getLimiter(chatID int64) *rate.Limiter {
 	defer d.mu.Unlock()
 	limit, found := d.rateLimitByChannelID[chatID]
 	if !found {
-		// Telegram limit is 20 messages for 1 chat per minute,
-		// take 15 for time window inconsistency risk
+		// Telegram allows ~20 messages per chat per minute; we cap at 15 for
+		// clock-skew safety. rate.Every sets the per-token refill interval,
+		// so for "15 per minute" the interval is a minute divided by 15.
+		// Using rate.Every(time.Minute) would refill only 1 token/min, i.e.
+		// stall at ~1 msg/min after the burst.
 		// https://core.telegram.org/bots/faq#my-bot-is-hitting-limits-how-do-i-avoid-this
-		limit = rate.NewLimiter(rate.Every(1*time.Minute), 15)
+		limit = rate.NewLimiter(rate.Every(time.Minute/15), 15)
 		d.rateLimitByChannelID[chatID] = limit
 	}
 	return limit
