@@ -59,18 +59,17 @@ func (d *Domain) Ban(ctx context.Context, channelID, userID int64, revokeMessage
 	return err
 }
 
-// Unban lifts a previous restriction on userID in channelID. onlyIfBanned
-// mirrors the Telegram parameter: when true the call is a no-op for users who
-// are not currently banned (avoids a spurious error after a failed ban); when
-// false it removes a current member from the chat — which is how the kicker
-// kicks a user without keeping the ban.
-func (d *Domain) Unban(ctx context.Context, channelID, userID int64, onlyIfBanned bool) error {
+// Unban lifts a previous restriction on userID in channelID.
+func (d *Domain) Unban(ctx context.Context, channelID, userID int64) error {
 	_, err := d.botClient.UnbanChatMember(
 		ctx,
 		&bot.UnbanChatMemberParams{
-			ChatID:       normalizeBotChatID(channelID),
-			UserID:       userID,
-			OnlyIfBanned: onlyIfBanned,
+			ChatID: normalizeBotChatID(channelID),
+			UserID: userID,
+			// OnlyIfBanned:true makes the unban a no-op (instead of an error)
+			// when the preceding ban did not take effect, which is the only
+			// case the kicker reaches this call after a failed ban.
+			OnlyIfBanned: true,
 		},
 	)
 	return err

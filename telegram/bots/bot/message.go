@@ -68,7 +68,7 @@ func (d *Domain) SendMessage(ctx context.Context, message *guard.Message) error 
 		ctx, tgMessage,
 	)
 
-	if needClean {
+	if needClean && msg != nil {
 		_, _ = d.botClient.DeleteMessage(ctx, &bot.DeleteMessageParams{
 			ChatID:    tgMessage.ChatID,
 			MessageID: msg.ID,

@@ -12,11 +12,10 @@ type Logger interface {
 
 // TelegramBotUserKicker restricts and notifies users. It abstracts over the
 // raw Bot API so the kicker can be backed by a rate-limited, FLOOD_WAIT-aware
-// implementation (see telegram/sender/ratelimited.Restrictor). Hitting the
-// ban/unban endpoints on the raw *bot.Bot without throttling is the most
-// reliable way to get the bot account restricted or banned.
+// implementation (see telegram/sender/ratelimited). Hitting Telegram's ban /
+// unban endpoints without throttling gets the bot account restricted.
 type TelegramBotUserKicker interface {
 	Ban(ctx context.Context, channelID, userID int64, revokeMessages bool) error
-	Unban(ctx context.Context, channelID, userID int64, onlyIfBanned bool) error
+	Unban(ctx context.Context, channelID, userID int64) error
 	SendReport(ctx context.Context, chatID int64, text string) error
 }

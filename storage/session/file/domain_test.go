@@ -84,8 +84,14 @@ func TestNew(t *testing.T) {
 			storage, err := New(cryptor)
 			assert.NoError(t, err)
 
-			_, err = storage.LoadSession(ctx, "name2222")
-			assert.Error(t, err)
+			// A non-existent session returns an empty byte slice and no
+			// error: the gotd session-storage contract treats an empty
+			// payload as "no session yet" (first-run / fresh authorization).
+			// Previously this asserted Error, but LoadSession deliberately
+			// returns ([], nil) when the file is missing.
+			val, err := storage.LoadSession(ctx, "name2222")
+			assert.NoError(t, err)
+			assert.Empty(t, val)
 		},
 	)
 

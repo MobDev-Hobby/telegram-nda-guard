@@ -115,10 +115,6 @@ func (d *Domain) getUserLink(user guard.User) string {
 func (d *Domain) sendReportForChannel(ctx context.Context, _ int64, reportChannels []int64, messages []string) {
 	for _, chatID := range reportChannels {
 		for _, message := range messages {
-			if len(messages) == 0 {
-				continue
-			}
-
 			_, err := d.botClient.SendMessage(
 				ctx,
 				&bot.SendMessageParams{

@@ -19,12 +19,14 @@ func (d *Domain) retryHandler(
 			Text:     "Re-init user bot...",
 		},
 	)
-	d.runUserBot(ctx)
-
+	// Check the send result before re-initializing. Previously
+	// d.runUserBot(ctx) ran unconditionally and the error check below was
+	// effectively dead code.
 	if err != nil {
 		d.log.Errorf("can't send message: %s", err)
 		return
 	}
+	d.runUserBot(ctx)
 
 	d.log.Debugf("processed get ID for chat: %d", update.Message.ChatID)
 }
