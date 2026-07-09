@@ -46,7 +46,10 @@ func (d *Domain) CheckRights(ctx context.Context) error {
 }
 
 func (d *Domain) updateChannelInfo(ctx context.Context) error {
-	for channelID := range d.channels {
+	// Snapshot IDs first: MigrateChannel mutates d.channels (delete+insert),
+	// and mutating a map during range yields unspecified iteration order and
+	// can skip/revisit keys.
+	for _, channelID := range d.snapshotChannelIDs() {
 		channel, err := d.telegramBot.GetChat(ctx, channelID)
 
 		if err != nil {
@@ -54,10 +57,12 @@ func (d *Domain) updateChannelInfo(ctx context.Context) error {
 		}
 
 		if channel != nil {
+			d.channelsMutex.Lock()
 			channelInfo := d.channels[channelID]
 			channelInfo.title = channel.Title
 			channelInfo.chatType = channel.Type
 			d.channels[channelID] = channelInfo
+			d.channelsMutex.Unlock()
 
 			if channel.MigratedTo != nil {
 				err := d.MigrateChannel(channelID, *channel.MigratedTo)
@@ -65,6 +70,8 @@ func (d *Domain) updateChannelInfo(ctx context.Context) error {
 					d.log.Errorf("Migrate error: %v", err)
 					continue
 				}
+				// channelID was deleted from d.channels by MigrateChannel, so
+				// read the title from the GetChat result we already hold.
 				d.NotifyAdmin(
 					ctx,
 					fmt.Sprintf(
@@ -72,7 +79,7 @@ func (d *Domain) updateChannelInfo(ctx context.Context) error {
 							"Old ID: <b>%d</b>\n"+
 							"New ID: <b>%d</b>\n\n"+
 							"Now I handled it, but you should update config.",
-						d.channels[channelID].title,
+						channel.Title,
 						channelID,
 						*channel.MigratedTo,
 					),
@@ -85,11 +92,18 @@ func (d *Domain) updateChannelInfo(ctx context.Context) error {
 }
 
 func (d *Domain) updateBotAccessRights(ctx context.Context) error {
-	for channelID, channel := range d.channels {
+	for _, channelID := range d.snapshotChannelIDs() {
+		d.channelsMutex.RLock()
+		channel := d.channels[channelID]
 		protectedChannel, ok := d.protectedChannels[channelID]
+		d.channelsMutex.RUnlock()
 		if !ok {
-			d.log.Panicf("Channel %s not found in protected channels", channel.title)
-			return nil
+			// A channel can transiently be in d.channels but not yet in
+			// d.protectedChannels (e.g. during a migration, where the two
+			// maps are updated non-atomically). Logging and continuing is
+			// correct; panicking the whole bot over a transient state is not.
+			d.log.Errorf("Channel %s not found in protected channels", channel.title)
+			continue
 		}
 
 		isMember, permissions, err := d.telegramBot.CheckAccessUser(
@@ -101,10 +115,11 @@ func (d *Domain) updateBotAccessRights(ctx context.Context) error {
 		)
 
 		if err != nil {
-			d.log.Errorf("Gen't check access rights: %v", err)
+			d.log.Errorf("Can't check access rights: %v", err)
 			continue
 		}
 
+		d.channelsMutex.Lock()
 		if !isMember {
 			d.NotifyAdmin(
 				ctx,
@@ -116,6 +131,7 @@ func (d *Domain) updateBotAccessRights(ctx context.Context) error {
 			)
 			channel.botOnChannel = false
 			d.channels[channelID] = channel
+			d.channelsMutex.Unlock()
 			continue
 		}
 
@@ -130,7 +146,7 @@ func (d *Domain) updateBotAccessRights(ctx context.Context) error {
 			d.NotifyAdmin(
 				ctx,
 				fmt.Sprintf(
-					"I need to have admin permissins to clean channel [%d]<b>%s</b>, promote me, please",
+					"I need to have admin permissions to clean channel [%d]<b>%s</b>, promote me, please",
 					channelID,
 					channel.title,
 				),
@@ -138,6 +154,7 @@ func (d *Domain) updateBotAccessRights(ctx context.Context) error {
 		}
 
 		d.channels[channelID] = channel
+		d.channelsMutex.Unlock()
 	}
 
 	return nil
