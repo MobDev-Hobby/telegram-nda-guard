@@ -64,9 +64,12 @@ func (d *Domain) Unban(ctx context.Context, channelID, userID int64) error {
 	_, err := d.botClient.UnbanChatMember(
 		ctx,
 		&bot.UnbanChatMemberParams{
-			ChatID:       normalizeBotChatID(channelID),
-			UserID:       userID,
-			OnlyIfBanned: false,
+			ChatID: normalizeBotChatID(channelID),
+			UserID: userID,
+			// OnlyIfBanned:true makes the unban a no-op (instead of an error)
+			// when the preceding ban did not take effect, which is the only
+			// case the kicker reaches this call after a failed ban.
+			OnlyIfBanned: true,
 		},
 	)
 	return err

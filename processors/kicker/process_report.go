@@ -3,14 +3,9 @@ package kicker
 import (
 	"context"
 	"fmt"
-	"strconv"
-
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
-	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 )
 
 func (d *Domain) ProcessReport(
@@ -24,52 +19,12 @@ func (d *Domain) ProcessReport(
 		usersToClean = append(usersToClean, report.UnknownUsers...)
 	}
 
-	commandChatID := report.Channel.ID
-	if commandChatID > 0 {
-		commandChatID, _ = strconv.ParseInt(
-			fmt.Sprintf("-100%d", report.Channel.ID),
-			10,
-			64,
-		)
-	}
-
-	success := true
 	for _, user := range usersToClean {
-		chanToBanUser := commandChatID
-		if report.Channel.MigratedTo != nil {
-			chanToBanUser = *report.Channel.MigratedTo
-		}
-
-		if d.keepBanned || d.cleanMessages {
-			successBanned, err := d.botClient.BanChatMember(
-				ctx,
-				&bot.BanChatMemberParams{
-					ChatID:         chanToBanUser,
-					UserID:         user.ID,
-					RevokeMessages: d.cleanMessages,
-				},
-			)
-			if err != nil {
-				d.log.Errorf("can't send ban user: %s. Error: %s", user.Username, err.Error())
-			}
-			success = success && successBanned
-		}
-
-		if !d.keepBanned {
-			successKicked, err := d.botClient.UnbanChatMember(
-				ctx,
-				&bot.UnbanChatMemberParams{
-					ChatID:       chanToBanUser,
-					UserID:       user.ID,
-					OnlyIfBanned: false,
-				},
-			)
-			if err != nil {
-				d.log.Errorf("can't send ban user: %s. Error: %s", user.Username, err.Error())
-			}
-			success = success && successKicked
-		}
-		if success {
+		// Count success per-user. Previously `success` was accumulated across
+		// iterations (`success = success && ...`), so once any user failed the
+		// counter stayed false for every subsequent user, undercounting even
+		// successfully kicked users in the "Kicked N/M" report.
+		if d.cleanUser(ctx, report.Channel, user) {
 			cleanedUsers++
 		}
 	}
@@ -98,20 +53,41 @@ func (d *Domain) ProcessReport(
 	)
 
 	for _, chatID := range report.ReportChannels {
-		_, err := d.botClient.SendMessage(
-			ctx,
-			&bot.SendMessageParams{
-				ChatID:    chatID,
-				Text:      message,
-				ParseMode: models.ParseModeHTML,
-				LinkPreviewOptions: &models.LinkPreviewOptions{
-					IsDisabled: utils.Ptr(true),
-				},
-			},
-		)
-		if err != nil {
+		if err := d.botClient.SendReport(ctx, chatID, message); err != nil {
 			d.log.Errorf("can't send message: %s. Message text: %s", err, message)
 		}
 	}
 	d.log.Debugf(message)
+}
+
+// cleanUser bans then (optionally) unbans a single user. Returns true when the
+// user was removed from the channel. The bot client is expected to be
+// rate-limited and to handle Telegram FLOOD_WAIT (429) internally; chat-id
+// normalization (-100 prefix) and OnlyIfBanned handling live in the wrapped
+// restrictor, so the kicker deals only in logical channel ids.
+func (d *Domain) cleanUser(
+	ctx context.Context,
+	channel guard.ChannelInfo,
+	user guard.User,
+) bool {
+
+	if d.keepBanned || d.cleanMessages {
+		if err := d.botClient.Ban(ctx, channel.ID, user.ID, d.cleanMessages); err != nil {
+			d.log.Errorf("can't ban user %s: %s", user.Username, err)
+			return false
+		}
+	}
+
+	if !d.keepBanned {
+		// OnlyIfBanned:true is applied inside the restrictor client, so when
+		// the ban step did not take effect the unban is a no-op instead of an
+		// error. Previously OnlyIfBanned:false produced a misleading
+		// "USER_NOT_PARTICIPANT" error logged (wrongly) as "can't send ban".
+		if err := d.botClient.Unban(ctx, channel.ID, user.ID); err != nil {
+			d.log.Errorf("can't unban user %s: %s", user.Username, err)
+			return false
+		}
+	}
+
+	return true
 }
