@@ -32,6 +32,7 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 ### Added
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 - `guard.ChannelInfo.Type` (`string`) — the Telegram chat type, plus
   `ChatType*` constants (`ChatTypePrivate`, `ChatTypeGroup`,
   `ChatTypeSupergroup`, `ChatTypeChannel`) and a `guard.ChatTypeNoun(type)`
@@ -76,10 +77,18 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   mutation from command handlers.
 - `Domain.channelHasTicker(channelID)` helper.
 >>>>>>> glm/settings-ui
+=======
+- **Channel users view.** New `/users <id>` command (message and inline-button
+  callback) that lists a channel's members, classified into Good / Unknown / Bad
+  by the channel's access checker — a read-only on-demand counterpart to
+  `/scan`. Large listings are truncated per-section with a hint to run `/scan`
+  for a full persisted report. `/list` now shows a `/users` button per channel.
+>>>>>>> glm/users-view
 - Established this `CHANGELOG.md` and the migration-note convention documented
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 ### Security
 
@@ -141,11 +150,16 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   wrapped in `Domain.requireAuth` so only authorized operators can change
   settings.
 
+=======
+>>>>>>> glm/users-view
 ### Migration
 
 No action required for consumers at this point. This entry only formalizes the
 changelog going forward.
+<<<<<<< HEAD
 >>>>>>> glm/settings-ui
+=======
+>>>>>>> glm/users-view
 
 ---
 

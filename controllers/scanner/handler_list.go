@@ -91,6 +91,13 @@ func (d *Domain) ListChannelsHandler(
 					Command: fmt.Sprintf("/settings %d", channelID),
 				},
 			)
+			buttons = append(
+				buttons,
+				guard.InlineButton{
+					Text:    "/users",
+					Command: fmt.Sprintf("/users %d", channelID),
+				},
+			)
 		}
 
 		err = d.telegramBot.SendMessage(

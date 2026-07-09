@@ -3,7 +3,6 @@ package scanner
 import (
 	"context"
 	"fmt"
-	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
@@ -13,10 +12,15 @@ func (d *Domain) AddChannelHandler(
 	update *guard.Update,
 ) {
 
-	d.log.Debugf("Chat add request got from chat: %d", update.Message.ChatID, update.Message.User.Username)
+	d.log.Debugf("Chat add request got from chat: %d, user: %s", update.Message.ChatID, update.Message.User.Username)
 
-	requestId := int32(update.Message.ChatID*1000 + time.Now().UnixNano())
+	// Use a 32-bit request id for the Telegram request_chat button. The
+	// previous int32 cast of (ChatID*1000 + Nanos) overflowed for any
+	// realistic chat id, causing collisions in the pending-request map.
+	requestId := d.nextAddChannelRequestID()
+	d.channelsMutex.Lock()
 	d.addChannelHandlers[int(requestId)] = update.Message.ChatID
+	d.channelsMutex.Unlock()
 
 	requestChannel := true
 	err := d.telegramBot.SendMessage(
@@ -29,7 +33,7 @@ func (d *Domain) AddChannelHandler(
 				{
 					{
 						Text:           "Select channel",
-						ID:             int32(requestId),
+						ID:             requestId,
 						RequestChannel: &requestChannel,
 					},
 				},
@@ -57,10 +61,12 @@ func (d *Domain) AddChannelCallbackHandler(
 	}
 
 	requestID := update.Message.ChatShared.RequestID
+	d.channelsMutex.RLock()
 	chatId, expected := d.addChannelHandlers[requestID]
+	d.channelsMutex.RUnlock()
 	if !expected || chatId != update.Message.ChatID {
 
-		d.log.Infof("Unexpected chat add request got, requestID: %d, chatId: %c", requestID, chatId)
+		d.log.Infof("Unexpected chat add request got, requestID: %d, chatId: %d", requestID, chatId)
 
 		err := d.telegramBot.SendMessage(
 			ctx,
@@ -80,7 +86,9 @@ func (d *Domain) AddChannelCallbackHandler(
 		return
 	}
 
+	d.channelsMutex.Lock()
 	delete(d.addChannelHandlers, requestID)
+	d.channelsMutex.Unlock()
 
 	d.log.Debugf("processed get ID for chat: %d", update.Message.ChatID)
 
