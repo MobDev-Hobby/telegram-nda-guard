@@ -54,9 +54,27 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   inside the kicker.
 - `scanner.ProtectedChannel.CleanOptions` (`*processors.CleanOptions`) —
   per-channel cleanup overrides forwarded into the cleaner's `AccessReport`.
+- **Command authorization subsystem.** New `scanner.Authorizer` interface
+  (`Authorize(ctx, *guard.Update) (bool, error)`) and a `scanner.WithAuthorizer`
+  option. The bundled default lives in `controllers/scanner/authorizer` as
+  `HybridAuthorizer`, which allows the configured owner, an explicit allowlist,
+  and (optionally) administrators of the originating chat.
+- `scanner.TelegramBot.GetChatAdministrators(ctx, chatID) ([]int64, error)` —
+  implemented by `telegram/bots/bot.Domain`, used by the hybrid authorizer's
+  admin check.
+- `REQUIRE_ADMIN_AUTH` env var in `cmd/example` to opt into owner+admin
+  authorization (off by default for backwards compatibility).
 - Established this `CHANGELOG.md` and the migration-note convention documented
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
+
+### Security
+
+- Previously **any member of a controlling chat** could run `/scan`, `/clean`,
+  `/list`, `/add` and similar commands — there was no authorization at all. The
+  new `Authorizer` is a pluggable chokepoint; protected commands now go through
+  `Domain.requireAuth`. The default remains allow-all unless an authorizer is
+  configured, so existing deployments keep working.
 
 ### Changed
 
@@ -97,6 +115,11 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 - Optional: to enable per-channel cleanup behavior, set
   `scanner.ProtectedChannel.CleanOptions`. Otherwise the kicker's configured
   defaults apply as before.
+- **`scanner.TelegramBot` gained `GetChatAdministrators`.** Any custom
+  implementation of this interface must add it. The bundled
+  `telegram/bots/bot.Domain` already provides it.
+- Optional, non-breaking: to restrict who can run commands, pass
+  `scanner.WithAuthorizer(...)`. Without it, behavior is unchanged.
 
 ---
 

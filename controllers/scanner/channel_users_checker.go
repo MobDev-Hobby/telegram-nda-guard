@@ -8,6 +8,7 @@ import (
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 )
 
 func (d *Domain) CheckPermissions(_ context.Context, request ScanRequest) error {
@@ -105,14 +106,17 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		UnknownUsers: []guard.User{},
 	}
 
-	if d.channels[request.channelInfo.id].migratedFrom != nil {
-		report.Channel.ID = request.channelInfo.id
+	if ch, chOk := d.getChannel(request.channelInfo.id); chOk && ch.migratedFrom != nil {
+		// Propagate migration target so the kicker bans the correct (new)
+		// chat. Previously MigratedTo was never set, so bans targeted a
+		// stale id.
+		report.Channel.MigratedTo = utils.Ptr(request.channelInfo.id)
 	}
 
 	if request.reportChannels != nil {
 		report.ReportChannels = *request.reportChannels
 	} else {
-		protectedChannel, ok := d.protectedChannels[request.channelInfo.id]
+		protectedChannel, ok := d.getProtectedChannel(request.channelInfo.id)
 		if !ok {
 			d.log.Errorf("protected channel for channel %d not found", request.channelInfo.id)
 			return
@@ -171,9 +175,20 @@ func (d *Domain) RunUserAccessChecker(ctx context.Context) {
 			Chan: reflect.ValueOf(ctx.Done()),
 		}
 		for {
-			cases := append(d.tickerCases, contextDone)
+			// Snapshot the ticker slices under the lock so reflect.Select
+			// does not race registerTicker/removeTickers/MigrateChannel, and
+			// build a fresh slice to avoid aliasing d.tickerCases' backing
+			// array (append below would otherwise write into shared capacity).
+			d.tickerCasesMutex.Lock()
+			cases := make([]reflect.SelectCase, 0, len(d.tickerCases)+1)
+			cases = append(cases, d.tickerCases...)
+			tickerChannels := make([]int64, len(d.tickerCasesChannels))
+			copy(tickerChannels, d.tickerCasesChannels)
+			d.tickerCasesMutex.Unlock()
+			cases = append(cases, contextDone)
+
 			selected, _, ok := reflect.Select(cases)
-			// ctx.Done
+			// ctx.Done is the last case
 			if selected == len(cases)-1 {
 				d.log.Infof("context done, terminating user access checker")
 				return
@@ -182,37 +197,56 @@ func (d *Domain) RunUserAccessChecker(ctx context.Context) {
 				d.log.Infof("channel closed, skip")
 				return
 			}
-			if selected > len(d.tickerCasesChannels) {
+			// bounds check: selected indexes into cases (= tickerChannels),
+			// so valid range is [0, len(tickerChannels)-1]; use >= (was >).
+			if selected >= len(tickerChannels) {
 				d.log.Errorf("wrong ticker %d, skip", selected)
 				continue
 			}
-			channelID := d.tickerCasesChannels[selected]
-			protectedChannel, ok := d.protectedChannels[channelID]
+			channelID := tickerChannels[selected]
+			protectedChannel, ok := d.getProtectedChannel(channelID)
 			if !ok {
 				d.log.Infof("channel for ticker %d error, skip", selected)
 				continue
 			}
-			channel, ok := d.channels[protectedChannel.ID]
+			channel, ok := d.getChannel(protectedChannel.ID)
 			if !ok {
+				// was missing continue: fall-through enqueued a zero-value
+				// ChannelInfo, producing misleading "no rights" errors
 				d.log.Infof("channel ID %d not ready yet, skip", protectedChannel.ID)
+				continue
 			}
 			if protectedChannel.AutoScan {
-				d.processRequestChan <- ScanRequest{
+				d.enqueueScanRequest(ctx, ScanRequest{
 					requestType:     AutoScan,
 					channelInfo:     channel,
 					accessChecker:   protectedChannel.AccessChecker,
 					reportProcessor: protectedChannel.ScanReportProcessor,
-				}
+				})
 			}
 
 			if protectedChannel.AutoClean {
-				d.processRequestChan <- ScanRequest{
+				d.enqueueScanRequest(ctx, ScanRequest{
 					requestType:     AutoClean,
 					channelInfo:     channel,
 					accessChecker:   protectedChannel.AccessChecker,
 					reportProcessor: protectedChannel.CleanReportProcessor,
-				}
+				})
 			}
 		}
 	}(ctx)
+}
+
+// enqueueScanRequest sends a scan request without blocking forever when the
+// worker queue is full. A full queue would otherwise wedge the ticker
+// goroutine (leaking it on shutdown, since it could no longer service
+// ctx.Done) and the bot update pipeline.
+func (d *Domain) enqueueScanRequest(ctx context.Context, request ScanRequest) {
+	select {
+	case d.processRequestChan <- request:
+	case <-ctx.Done():
+		d.log.Warnf("scan request dropped, context done: %s", ctx.Err())
+	default:
+		d.log.Warnf("scan queue full, dropping %v request for channel %d", request.requestType, request.channelInfo.id)
+	}
 }

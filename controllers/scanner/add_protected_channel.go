@@ -36,12 +36,19 @@ func WithCron(cronString string) TickerOption {
 		tickerChan := make(chan time.Time, 1)
 		_, err := c.AddFunc(
 			cronString, func() {
-				tickerChan <- time.Now()
+				select {
+				case tickerChan <- time.Now():
+				default:
+					// drop if the buffer is full; a pending tick is enough
+				}
 			},
 		)
 		if err != nil {
 			return err
 		}
+		// c.Start() was missing, so the scheduler never fired and
+		// WithCronScheduledChannel produced a channel that never ticked.
+		c.Start()
 		opts.tickerChan = tickerChan
 		return nil
 	}
@@ -94,6 +101,7 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 			return err
 		}
 	}
+	d.channelsMutex.Lock()
 	// Channel cache
 	d.channels[channel.ID] = ChannelInfo{
 		id:                channel.ID,
@@ -106,15 +114,24 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 
 		// Ticker
 		if channel.AutoScan || channel.AutoClean {
-			var err error
+			var tickerErr error
 			if len(opts) == 0 {
 				ticker := time.NewTicker(d.channelAutoScanInterval)
-				err = d.registerTicker(ticker.C, channel.ID)
+				// registerTicker takes tickerCasesMutex; we already hold
+				// channelsMutex but tickerCasesMutex is a different lock and
+				// is never taken while holding channelsMutex elsewhere, so
+				// there is no lock-ordering deadlock.
+				tickerErr = d.registerTicker(ticker.C, channel.ID)
 			} else {
-				err = d.applyOptions(opts, channel.ID)
+				// applyOptions may itself take channelsMutex-free paths and
+				// register tickers; unlock to keep the critical section tight.
+				d.channelsMutex.Unlock()
+				tickerErr = d.applyOptions(opts, channel.ID)
+				d.channelsMutex.Lock()
 			}
-			if err != nil {
-				return err
+			if tickerErr != nil {
+				d.channelsMutex.Unlock()
+				return tickerErr
 			}
 		}
 	}
@@ -136,6 +153,7 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 			channel.ID,
 		)
 	}
+	d.channelsMutex.Unlock()
 
 	d.log.Infof("Added protected channel %d/%v", channel.ID, channel.CommandChannelIDs)
 
@@ -161,6 +179,9 @@ func (d *Domain) applyOptions(opts []TickerOption, channelID int64) error {
 }
 
 func (d *Domain) MigrateChannel(migratedFromID, migratedToID int64) error {
+	d.channelsMutex.Lock()
+	defer d.channelsMutex.Unlock()
+
 	newChannel := d.channels[migratedFromID]
 	oldChannel := migratedFromID
 	newChannel.migratedFrom = &oldChannel

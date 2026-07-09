@@ -33,6 +33,17 @@ type CheckUserAccess interface {
 	HasAccess(context.Context, *guard.User) (bool, error)
 }
 
+// Authorizer decides whether the sender of an update is allowed to run a
+// protected command. Implementations are pluggable via WithAuthorizer; the
+// bundled default is a hybrid authorizer (see NewHybridAuthorizer) that allows
+// the configured owner and, optionally, administrators of the controlling chat.
+//
+// When Authorize returns (false, nil) the command is silently skipped. A
+// non-nil error also denies the command and is logged.
+type Authorizer interface {
+	Authorize(ctx context.Context, update *guard.Update) (bool, error)
+}
+
 type UserBot interface {
 	Run(
 		ctx context.Context,
@@ -68,5 +79,9 @@ type TelegramBot interface {
 		bool,
 		error,
 	)
+	// GetChatAdministrators returns the user IDs of the administrators of chatID
+	// (owner and admins). Used by the default authorizer to decide whether the
+	// sender of a command may run it.
+	GetChatAdministrators(ctx context.Context, chatID int64) ([]int64, error)
 	CallbackResponse(ctx context.Context, response guard.CallbackResponse)
 }
