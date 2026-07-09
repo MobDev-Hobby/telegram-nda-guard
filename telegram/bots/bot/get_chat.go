@@ -43,5 +43,6 @@ func (d *Domain) GetChat(ctx context.Context, channelID int64) (*guard.ChannelIn
 		ID:         channelID,
 		Title:      chat.Title,
 		MigratedTo: migratedTo,
+		Type:       string(chat.Type),
 	}, nil
 }

@@ -31,6 +31,14 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ### Added
 
+- `guard.ChannelInfo.Type` (`string`) — the Telegram chat type, plus
+  `ChatType*` constants (`ChatTypePrivate`, `ChatTypeGroup`,
+  `ChatTypeSupergroup`, `ChatTypeChannel`) and a `guard.ChatTypeNoun(type)`
+  helper that returns `"channel"` for broadcast channels and `"chat"`
+  otherwise. This lets consumers distinguish channels from chats/groups.
+  `bots/bot.GetChat` now populates `Type` from the Bot API response, and the
+  scan/clean reports (reporter and kicker) use the correct noun instead of the
+  hardcoded "chat".
 - Established this `CHANGELOG.md` and the migration-note convention documented
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
