@@ -11,6 +11,10 @@ import (
 type ProtectedChannelStorage interface {
 	LoadAll(ctx context.Context) ([]channels.ProtectedChannel, error)
 	Store(ctx context.Context, protectedChannel *channels.ProtectedChannel) error
+	// Drop removes the persisted record of the protected channel identified by
+	// channelID. Implementations must be idempotent: dropping a channel that has
+	// no persisted record must not return an error.
+	Drop(ctx context.Context, channelID int64) error
 }
 
 type Logger interface {

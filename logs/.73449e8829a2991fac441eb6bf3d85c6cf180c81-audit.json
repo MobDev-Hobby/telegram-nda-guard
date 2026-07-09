@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/Users/aakhodzhakhanov/dev/telegram-nda-guard/logs/.73449e8829a2991fac441eb6bf3d85c6cf180c81-audit.json",
+    "files": [
+        {
+            "date": 1756393476872,
+            "name": "/Users/aakhodzhakhanov/dev/telegram-nda-guard/logs/mcp-puppeteer-2025-08-28.log",
+            "hash": "7b8a20db63deab86a0ce15f0bb7c0d70a98194488008f6472c33cab867f48070"
+        }
+    ],
+    "hashType": "sha256"
+}

@@ -33,7 +33,10 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.retryHandler,
+		// /retry forces a userbot reconnection. Without authorization any
+		// user could spam it to drive a re-init loop (DoS / log spam), so
+		// gate it on the configured admin chat.
+		d.requireAdmin(d.retryHandler),
 	)
 
 	d.log.Debugf("Register /start and /help handlers")
@@ -143,7 +146,11 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		)
 	}
 
-	if d.adminUserChatID == 0 {
+	// /admin bootstrap is only useful while no owner is configured. The
+	// Domain default is adminUserChatID == -1 and WithOwnerChatID requires
+	// a positive id, so the previous "== 0" gate made this route
+	// unreachable. Use "<= 0" to also cover the default sentinel.
+	if d.adminUserChatID <= 0 {
 		d.log.Debugf("Register /admin <code> handler")
 		d.telegramBot.RegisterHandler(
 			ctx,
@@ -162,5 +169,31 @@ func (d *Domain) setupCommands(ctx context.Context) {
 				},
 			),
 		)
+	}
+}
+
+// requireAdmin wraps a handler so it only runs when the update originates
+// from the configured admin chat. Previously /retry (and the removed /call)
+// had no authorization, letting any user trigger privileged bot/userbot
+// actions. Callback-based command handlers that operate on protected
+// channels additionally validate the target channel separately.
+func (d *Domain) requireAdmin(
+	handler func(ctx context.Context, update *guard.Update),
+) func(ctx context.Context, update *guard.Update) {
+	return func(ctx context.Context, update *guard.Update) {
+		var chatID int64
+		switch {
+		case update.Message != nil:
+			chatID = update.Message.ChatID
+		case update.CallbackQuery != nil && update.CallbackQuery.Message != nil:
+			chatID = update.CallbackQuery.Message.ChatID
+		default:
+			return
+		}
+		if chatID != d.adminUserChatID {
+			d.log.Warnf("unauthorized command attempt from chat %d", chatID)
+			return
+		}
+		handler(ctx, update)
 	}
 }

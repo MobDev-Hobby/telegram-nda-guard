@@ -39,14 +39,34 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   `bots/bot.GetChat` now populates `Type` from the Bot API response, and the
   scan/clean reports (reporter and kicker) use the correct noun instead of the
   hardcoded "chat".
+- `scanner.ProtectedChannelStorage.Drop(ctx, channelID int64) error` — removes
+  a protected channel's persisted record. `CleanProtectedChannel` now calls
+  `Drop` when a channel is fully detached (no remaining controlling chats) and
+  `Store` when its set of controlling chats changes, so in-memory removals
+  survive restarts.
 - Established this `CHANGELOG.md` and the migration-note convention documented
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
 
+### Fixed
+
+- **Layering violation:** `storage/channels/redis/drop.go` previously imported
+  `controllers/scanner` (a controller→storage dependency in reverse) and used
+  `scanner.ProtectedChannel`. It now accepts a plain `channelID int64` and uses
+  only the storage layer, removing the dependency cycle.
+
 ### Migration
 
-No action required for consumers at this point. This entry only formalizes the
-changelog going forward.
+- **`ProtectedChannelStorage` gained a `Drop` method.** Any custom
+  implementation of this interface (including non-redis backends) must add:
+  ```go
+  Drop(ctx context.Context, channelID int64) error
+  ```
+  The method must be idempotent (deleting a missing record must not error).
+  The bundled `storage/channels/redis` implementation already provides it.
+- `redis.Domain.Drop` changed its signature from
+  `Drop(ctx, *scanner.ProtectedChannel)` to `Drop(ctx, channelID int64)`.
+  Anyone calling the old (previously unused) method must update the call site.
 
 ---
 

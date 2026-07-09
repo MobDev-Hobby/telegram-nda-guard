@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "telegram_nda_guard",
+  "project_id": "53d6025e-55f1-4937-8f6b-4c8d97c0de20"
+}

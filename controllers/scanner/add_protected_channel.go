@@ -219,9 +219,34 @@ func (d *Domain) CleanProtectedChannel(channelID int64, commandChannelId int64) 
 	if len(commandChannels) == 0 {
 		d.removeTickers(channelID)
 		delete(d.protectedChannels, channelID)
+		// The channel is fully detached: also remove its persisted record so it
+		// does not reappear after a restart. Drop is idempotent.
+		if d.storage != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := d.storage.Drop(ctx, channelID); err != nil {
+				d.log.Errorf("can't drop channel %d from storage: %s", channelID, err)
+				return err
+			}
+		}
 	} else {
 		protectedChannel.CommandChannelIDs = commandChannels
 		d.protectedChannels[channelID] = protectedChannel
+		// The set of controlling chats changed: persist the updated record.
+		if d.storage != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := d.storage.Store(ctx, &channels.ProtectedChannel{
+				ID:                protectedChannel.ID,
+				CommandChannelIDs: protectedChannel.CommandChannelIDs,
+				AutoScan:          protectedChannel.AutoScan,
+				AutoClean:         protectedChannel.AutoClean,
+				AllowClean:        protectedChannel.AllowClean,
+			}); err != nil {
+				d.log.Errorf("can't update channel %d in storage: %s", channelID, err)
+				return err
+			}
+		}
 	}
 
 	controlledChannels := d.commandChannels[commandChannelId]
