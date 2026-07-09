@@ -44,6 +44,18 @@ type Authorizer interface {
 	Authorize(ctx context.Context, update *guard.Update) (bool, error)
 }
 
+// WebAuthenticator is the transport-neutral counterpart of Authorizer, used by
+// non-Telegram surfaces (e.g. the HTTP management API). The callerID is the
+// verified Telegram user ID (obtained via the Telegram Login Widget or an
+// equivalent token), and scopeChatID is the chat/channel the operation targets
+// (0 when there is no chat context, which disables the admin-check branch).
+//
+// The bundled HybridAuthorizer satisfies both Authorizer and WebAuthenticator,
+// so a single configured instance serves both transports.
+type WebAuthenticator interface {
+	AuthenticateAndAuthorize(ctx context.Context, callerID, scopeChatID int64) (bool, error)
+}
+
 type UserBot interface {
 	Run(
 		ctx context.Context,

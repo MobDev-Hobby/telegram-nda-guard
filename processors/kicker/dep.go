@@ -1,11 +1,6 @@
 package kicker
 
-import (
-	"context"
-
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-)
+import "context"
 
 type Logger interface {
 	Panicf(template string, args ...any)
@@ -15,17 +10,12 @@ type Logger interface {
 	Debugf(template string, args ...any)
 }
 
+// TelegramBotUserKicker restricts and notifies users. It abstracts over the
+// raw Bot API so the kicker can be backed by a rate-limited, FLOOD_WAIT-aware
+// implementation (see telegram/sender/ratelimited). Hitting Telegram's ban /
+// unban endpoints without throttling gets the bot account restricted.
 type TelegramBotUserKicker interface {
-	SendMessage(
-		ctx context.Context,
-		params *bot.SendMessageParams,
-	) (*models.Message, error)
-	BanChatMember(
-		ctx context.Context,
-		params *bot.BanChatMemberParams,
-	) (bool, error)
-	UnbanChatMember(
-		ctx context.Context,
-		params *bot.UnbanChatMemberParams,
-	) (bool, error)
+	Ban(ctx context.Context, channelID, userID int64, revokeMessages bool) error
+	Unban(ctx context.Context, channelID, userID int64) error
+	SendReport(ctx context.Context, chatID int64, text string) error
 }

@@ -96,40 +96,55 @@ func New(bot ChatAdminLister, opts ...Option) *HybridAuthorizer {
 	return h
 }
 
-// Authorize implements scanner.Authorizer.
+// Authorize implements scanner.Authorizer (the Telegram-side interface). It
+// extracts the sender and chat IDs from the update and delegates to the
+// transport-neutral authorizeIDs.
 func (h *HybridAuthorizer) Authorize(ctx context.Context, update *guard.Update) (bool, error) {
-	if update == nil || update.Message == nil {
-		// Callbacks carry the originating message; authorize on that.
-		if update != nil && update.CallbackQuery != nil && update.CallbackQuery.Message != nil {
-			return h.authorizeMessage(ctx, update.CallbackQuery.Message)
-		}
-		return false, errors.New("authorize: update has no message")
+	if update == nil {
+		return false, errors.New("authorize: nil update")
 	}
-	return h.authorizeMessage(ctx, update.Message)
+	if update.Message != nil {
+		return h.authorizeIDs(ctx, update.Message.User.ID, update.Message.ChatID)
+	}
+	if update.CallbackQuery != nil && update.CallbackQuery.Message != nil {
+		return h.authorizeIDs(ctx, update.CallbackQuery.Message.User.ID, update.CallbackQuery.Message.ChatID)
+	}
+	return false, errors.New("authorize: update has no message")
 }
 
-func (h *HybridAuthorizer) authorizeMessage(ctx context.Context, msg *guard.MessageReceived) (bool, error) {
-	senderID := msg.User.ID
+// AuthenticateAndAuthorize implements scanner.WebAuthenticator. It is the
+// transport-neutral entry point used by non-Telegram surfaces (e.g. the web
+// API): callerID is the verified Telegram user ID obtained from the login
+// widget, and scopeChatID is the chat/channel the operation targets (0 when
+// irrelevant, which disables the admin-check branch).
+func (h *HybridAuthorizer) AuthenticateAndAuthorize(ctx context.Context, callerID, scopeChatID int64) (bool, error) {
+	return h.authorizeIDs(ctx, callerID, scopeChatID)
+}
 
+// authorizeIDs is the single decision core shared by both transports. It
+// resolves whether callerID may act, optionally checking that they are an
+// administrator of scopeChatID when RequireAdmin is set and scopeChatID != 0.
+func (h *HybridAuthorizer) authorizeIDs(ctx context.Context, callerID, scopeChatID int64) (bool, error) {
 	// 1. Owner always wins.
-	if h.ownerUserID != 0 && senderID == h.ownerUserID {
+	if h.ownerUserID != 0 && callerID == h.ownerUserID {
 		return true, nil
 	}
 	// 2. Explicit allowlist.
 	for _, id := range h.allowUserIDs {
-		if id == senderID {
+		if id == callerID {
 			return true, nil
 		}
 	}
-	// 3. Optional: sender is an admin of the originating chat.
-	if h.requireAdmin {
-		admins, err := h.bot.GetChatAdministrators(ctx, msg.ChatID)
+	// 3. Optional: caller is an admin of the originating/target chat. Skipped
+	//    when scopeChatID is 0 (e.g. web calls without a chat context).
+	if h.requireAdmin && scopeChatID != 0 {
+		admins, err := h.bot.GetChatAdministrators(ctx, scopeChatID)
 		if err != nil {
-			h.log.Errorf("authorize: can't get chat admins for %d: %s", msg.ChatID, err)
+			h.log.Errorf("authorize: can't get chat admins for %d: %s", scopeChatID, err)
 			return false, nil
 		}
 		for _, id := range admins {
-			if id == senderID {
+			if id == callerID {
 				return true, nil
 			}
 		}

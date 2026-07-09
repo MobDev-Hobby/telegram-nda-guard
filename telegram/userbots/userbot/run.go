@@ -22,7 +22,8 @@ func (d *Domain) Run(
 
 	waiter := floodwait.NewWaiter().WithCallback(
 		func(ctx context.Context, wait floodwait.FloodWait) {
-			d.log.Infof("\nGot FLOOD_WAIT. Will retry after", wait.Duration)
+			// Missing format verb dropped the duration; log it properly.
+			d.log.Infof("Got FLOOD_WAIT. Will retry after %v", wait.Duration)
 		},
 	)
 
@@ -41,9 +42,14 @@ func (d *Domain) Run(
 							return fmt.Errorf("auth error: %w", err)
 						}
 
-						d.log.Infof("auth data: %+v", authData)
-
+						// Avoid dumping the whole auth struct at Info level; it
+						// leaks account metadata. Log only the bot user id.
 						botUser, valid := authData.User.AsNotEmpty()
+						if valid {
+							d.log.Infof("auth data: bot user id=%d", botUser.ID)
+						} else {
+							d.log.Infof("auth data: empty bot user")
+						}
 						if !valid {
 							d.userBot.me, err = d.userBot.client.Self(ctx)
 							if err != nil {
