@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/aes"
+	"crypto/tls"
 	"log"
 	"os"
 	"os/signal"
@@ -79,11 +80,23 @@ func main() {
 
 	var redisClient *goredisadapter.Domain
 	if options.RedisHost != "" {
-		redisConnect := goredis.NewClient(
-			&goredis.Options{
-				Addr: options.RedisHost,
-			},
-		)
+		redisOpts := &goredis.Options{
+			Addr: options.RedisHost,
+		}
+		// AUTH: empty credentials keep the legacy no-auth behavior; setting
+		// Password (and optionally Username for Redis 6 ACL) authenticates.
+		if options.RedisPassword != "" {
+			redisOpts.Username = options.RedisUsername
+			redisOpts.Password = options.RedisPassword
+		}
+		// TLS: recommended for any non-loopback host so that credentials and
+		// the session ciphertext are not sent in cleartext over the network.
+		if options.RedisTLS {
+			redisOpts.TLSConfig = &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			}
+		}
+		redisConnect := goredis.NewClient(redisOpts)
 		if redisConnect == nil {
 			logger.Panicf("can't init redis: %s", err)
 		}
@@ -105,9 +118,15 @@ func main() {
 			logger.Panicf("can't init session storage: %s", err)
 		}
 	} else {
+		fileOpts := []filestorage.SSOpts{
+			filestorage.WithLogger(logger.Named("storage")),
+		}
+		// Default moved out of world-traversable /tmp; operators can still
+		// override via SESSION_STORAGE_PATH.
+		fileOpts = append(fileOpts, filestorage.WithStoragePath(defaultSessionStoragePath(options.SessionStoragePath)))
 		sessionStorageDomain, err = filestorage.New(
 			cryptoProvider,
-			filestorage.WithLogger(logger.Named("storage")),
+			fileOpts...,
 		)
 		if err != nil {
 			logger.Panicf("can't init session storage: %s", err)
@@ -273,4 +292,15 @@ func main() {
 	<-ctx.Done()
 
 	logger.Infof("good bye!")
+}
+
+// defaultSessionStoragePath resolves the file-session directory. It prefers an
+// explicit SESSION_STORAGE_PATH; otherwise it falls back to a local "data"
+// directory (created with mode 0700) rather than the world-traversable /tmp,
+// since the session blob is the auth key used to impersonate the bot.
+func defaultSessionStoragePath(override string) string {
+	if override != "" {
+		return override
+	}
+	return "./data"
 }

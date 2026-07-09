@@ -21,11 +21,23 @@ type environmentConfig struct {
 	KickUnknownUsers           bool            `env:"KICK_UNKNOWN_USERS"`
 	UseRedisSessionStorage     bool            `env:"USE_REDIS_SESSION_STORAGE"`
 	RedisHost                  string          `env:"REDIS_HOST"`
+	// RedisUsername/RedisPassword enable Redis AUTH. Empty = no auth
+	// (backwards-compatible). Set both for Redis 6 ACL, or just Password for
+	// the legacy requirepass scheme.
+	RedisUsername string `env:"REDIS_USERNAME"`
+	RedisPassword string `env:"REDIS_PASSWORD"`
+	// RedisTLS enables TLS to Redis. Recommended for any non-loopback host so
+	// credentials and session ciphertext are not sent in cleartext.
+	RedisTLS bool `env:"REDIS_TLS"`
+	// SessionStoragePath overrides the file-session directory (default: ./data).
+	// The directory holds the encrypted Telegram session (the auth key used to
+	// impersonate the bot), so it must be owner-only.
+	SessionStoragePath string `env:"SESSION_STORAGE_PATH"`
 	// RequireAdminAuth, when true, restricts bot commands to the owner and to
 	// administrators of the controlling chat. When false (default), commands
 	// remain open to all members (backwards-compatible).
 	RequireAdminAuth bool `env:"REQUIRE_ADMIN_AUTH"`
 	// Web management API (optional). When WebAddr is empty, the web UI is disabled.
-	WebAddr         string `env:"WEB_ADDR"`
+	WebAddr          string `env:"WEB_ADDR"`
 	WebSessionSecret string `env:"WEB_SESSION_SECRET"`
 }

@@ -19,9 +19,13 @@ func TestNew(t *testing.T) {
 	cryptor, err := aes.NewCipher(key)
 	assert.NoError(t, err)
 
+	// Use an isolated temp dir so the default ./data does not get created in
+	// the package source tree and so concurrent subtests do not share state.
+	tmpDir := t.TempDir()
+
 	t.Run(
 		"success", func(t *testing.T) {
-			storage, err := New(cryptor)
+			storage, err := New(cryptor, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			err = storage.StoreSession(ctx, "name", data)
@@ -46,7 +50,7 @@ func TestNew(t *testing.T) {
 			cryptorMock := NewMockCryproProvider(ctrl)
 			cryptorMock.EXPECT().BlockSize().Return(1)
 
-			storage, err := New(cryptorMock)
+			storage, err := New(cryptorMock, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			err = storage.StoreSession(ctx, "name", data)
@@ -60,7 +64,7 @@ func TestNew(t *testing.T) {
 			cryptorMock := NewMockCryproProvider(ctrl)
 			cryptorMock.EXPECT().BlockSize().Return(1)
 
-			storage, err := New(cryptorMock)
+			storage, err := New(cryptorMock, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			_, err = storage.LoadSession(ctx, "name")
@@ -70,7 +74,7 @@ func TestNew(t *testing.T) {
 
 	t.Run(
 		"file fallback", func(t *testing.T) {
-			storage, err := New(cryptor)
+			storage, err := New(cryptor, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			val, err := storage.LoadSession(ctx, "name")
@@ -81,7 +85,7 @@ func TestNew(t *testing.T) {
 
 	t.Run(
 		"empty session", func(t *testing.T) {
-			storage, err := New(cryptor)
+			storage, err := New(cryptor, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			// A non-existent session returns an empty byte slice and no
@@ -97,7 +101,7 @@ func TestNew(t *testing.T) {
 
 	t.Run(
 		"wrong data error", func(t *testing.T) {
-			storage, err := New(cryptor)
+			storage, err := New(cryptor, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			err = storage.StoreSession(ctx, "name", data)
@@ -111,7 +115,7 @@ func TestNew(t *testing.T) {
 
 	t.Run(
 		"write file error", func(t *testing.T) {
-			storage, err := New(cryptor)
+			storage, err := New(cryptor, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			storage.dir = "/tmp/../../"
@@ -123,7 +127,7 @@ func TestNew(t *testing.T) {
 
 	t.Run(
 		"gen nonce error", func(t *testing.T) {
-			storage, err := New(cryptor)
+			storage, err := New(cryptor, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			storage.randomReader = strings.NewReader("1")
@@ -135,7 +139,7 @@ func TestNew(t *testing.T) {
 
 	t.Run(
 		"gcm open error", func(t *testing.T) {
-			storage, err := New(cryptor)
+			storage, err := New(cryptor, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
 			err = storage.StoreSession(ctx, "name", data)
