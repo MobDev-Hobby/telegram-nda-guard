@@ -53,13 +53,13 @@ func (d *Domain) scanChannelByControlChatHandler(
 		commandChatID := update.Message.ChatID
 		response := ""
 
-		if len(d.commandChannels[commandChatID]) == 0 {
+		if !d.hasCommandChannels(commandChatID) {
 			response = fmt.Sprintf(
 				"No connected chats found for this channel %d",
 				commandChatID,
 			)
 		} else {
-			response = d.scanChannelHandler(ctx, commandChatID, d.commandChannels[commandChatID], requestType)
+			response = d.scanChannelHandler(ctx, commandChatID, d.getCommandChannels(commandChatID), requestType)
 		}
 
 		if response != "" {
@@ -90,6 +90,21 @@ func (d *Domain) scanChannelByControlChatHandler(
 			return
 		}
 
+		// Validate that the requested channel is actually linked to this
+		// control chat. Without this check, any user who can craft a
+		// callback could trigger a scan/clean on an arbitrary protected
+		// channel they do not own.
+		if !d.isChannelLinkedToControlChat(commandChatID, int64(channelRequired)) {
+			d.telegramBot.CallbackResponse(
+				ctx,
+				guard.CallbackResponse{
+					ID:        update.CallbackQuery.ID,
+					Text:      "This channel is not linked to your control chat",
+					ShowAlert: true,
+				})
+			return
+		}
+
 		response := d.scanChannelHandler(ctx, commandChatID, []int64{int64(channelRequired)}, requestType)
 		if response != "" {
 			d.telegramBot.CallbackResponse(
@@ -110,16 +125,16 @@ func (d *Domain) scanChannelHandler(
 	requestType ScanRequestType,
 ) string {
 
-	d.log.Debugf("process check for command chat: %d, %s", commandChannelID)
+	d.log.Debugf("process check for command chat: %d", commandChannelID)
 
 	channelsPlanned := make([]string, 0, len(chatsToScan))
 	operation := "Operation"
 	for _, channelID := range chatsToScan {
-		channel, ok := d.channels[channelID]
+		channel, ok := d.getChannel(channelID)
 		if !ok {
 			continue
 		}
-		protectedChannel, ok := d.protectedChannels[channel.id]
+		protectedChannel, ok := d.getProtectedChannel(channel.id)
 		if !ok {
 			continue
 		}
@@ -139,13 +154,15 @@ func (d *Domain) scanChannelHandler(
 		}
 
 		channelsPlanned = append(channelsPlanned, fmt.Sprintf("\n• %s", channel.title))
-		d.processRequestChan <- ScanRequest{
+		// Non-blocking send: a blocking send would wedge the Telegram update
+		// pipeline when the scan worker queue (buffer 10) is full.
+		d.enqueueScanRequest(ctx, ScanRequest{
 			requestType:     requestType,
 			channelInfo:     channel,
 			accessChecker:   protectedChannel.AccessChecker,
 			reportProcessor: reportProcessor,
 			reportChannels:  &[]int64{commandChannelID},
-		}
+		})
 	}
 
 	d.log.Debugf("Planned scans for channels: %s", strings.Join(channelsPlanned, ","))

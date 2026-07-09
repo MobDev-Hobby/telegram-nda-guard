@@ -314,3 +314,17 @@ func (d *Domain) removeTickers(channelID int64) {
 		}
 	}
 }
+
+// channelHasTicker reports whether a periodic scan/clean ticker is currently
+// registered for channelID.
+func (d *Domain) channelHasTicker(channelID int64) bool {
+	d.tickerCasesMutex.Lock()
+	defer d.tickerCasesMutex.Unlock()
+
+	for _, tickerChan := range d.tickerCasesChannels {
+		if tickerChan == channelID {
+			return true
+		}
+	}
+	return false
+}

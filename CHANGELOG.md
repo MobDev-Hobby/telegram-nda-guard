@@ -31,6 +31,7 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ### Added
 
+<<<<<<< HEAD
 - `guard.ChannelInfo.Type` (`string`) — the Telegram chat type, plus
   `ChatType*` constants (`ChatTypePrivate`, `ChatTypeGroup`,
   `ChatTypeSupergroup`, `ChatTypeChannel`) and a `guard.ChatTypeNoun(type)`
@@ -64,10 +65,22 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   admin check.
 - `REQUIRE_ADMIN_AUTH` env var in `cmd/example` to opt into owner+admin
   authorization (off by default for backwards compatibility).
+=======
+- **Channel settings UI.** New `/settings` command and `/settings <id>` +
+  `/setflag <id> <flag>` inline-button callbacks that let operators toggle
+  `AutoScan`, `AutoClean` and `AllowClean` per channel at runtime. Changes are
+  persisted via the storage layer and the periodic ticker is registered/removed
+  in sync (no restart needed). `/list` now shows a ⚙ button per channel.
+- `Domain.channelsMutex` (`sync.RWMutex`) guards the in-memory channel maps
+  (`commandChannels`, `protectedChannels`, `channels`) against concurrent
+  mutation from command handlers.
+- `Domain.channelHasTicker(channelID)` helper.
+>>>>>>> glm/settings-ui
 - Established this `CHANGELOG.md` and the migration-note convention documented
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
 
+<<<<<<< HEAD
 ### Security
 
 - Previously **any member of a controlling chat** could run `/scan`, `/clean`,
@@ -120,6 +133,19 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   `telegram/bots/bot.Domain` already provides it.
 - Optional, non-breaking: to restrict who can run commands, pass
   `scanner.WithAuthorizer(...)`. Without it, behavior is unchanged.
+=======
+### Notes
+
+- The toggle handlers are registered as plain callbacks on this branch. When
+  combined with the authorization subsystem (GLM-3), they should additionally be
+  wrapped in `Domain.requireAuth` so only authorized operators can change
+  settings.
+
+### Migration
+
+No action required for consumers at this point. This entry only formalizes the
+changelog going forward.
+>>>>>>> glm/settings-ui
 
 ---
 

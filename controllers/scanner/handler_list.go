@@ -12,9 +12,9 @@ func (d *Domain) ListChannelsHandler(
 	update *guard.Update,
 ) {
 
-	d.log.Debugf("Chat list request got from chat: %d", update.Message.ChatID, update.Message.User.Username)
+	d.log.Debugf("Chat list request got from chat: %d", update.Message.ChatID)
 
-	if len(d.commandChannels[update.Message.ChatID]) == 0 {
+	if !d.hasCommandChannels(update.Message.ChatID) {
 		err := d.telegramBot.SendMessage(
 			ctx, &guard.Message{
 				ChatID:   update.Message.ChatID,
@@ -45,13 +45,13 @@ func (d *Domain) ListChannelsHandler(
 		return
 	}
 
-	for _, channelID := range d.commandChannels[update.Message.ChatID] {
+	for _, channelID := range d.getCommandChannels(update.Message.ChatID) {
 
 		message := ""
 		buttons := []guard.InlineButton{}
 
-		channel, ok1 := d.channels[channelID]
-		protectedChannel, ok2 := d.protectedChannels[channel.id]
+		channel, ok1 := d.getChannel(channelID)
+		protectedChannel, ok2 := d.getProtectedChannel(channelID)
 
 		switch {
 		case !ok1:
@@ -81,6 +81,16 @@ func (d *Domain) ListChannelsHandler(
 					},
 				)
 			}
+
+			// Settings is always available so operators can tune flags even
+			// before the bot has confirmed scan/clean rights.
+			buttons = append(
+				buttons,
+				guard.InlineButton{
+					Text:    "⚙",
+					Command: fmt.Sprintf("/settings %d", channelID),
+				},
+			)
 		}
 
 		err = d.telegramBot.SendMessage(

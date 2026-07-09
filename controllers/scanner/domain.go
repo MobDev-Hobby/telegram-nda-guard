@@ -30,7 +30,7 @@ type Domain struct {
 	// channelsMutex guards commandChannels, protectedChannels, channels and
 	// addChannelHandlers. All four are read/written concurrently from the
 	// access-rights checker, the scan worker pool, the ticker goroutine and
-	// the per-update Telegram handlers.
+	// the per-update Telegram handlers (e.g. /add, /settings toggles, /remove).
 	channelsMutex sync.RWMutex
 
 	accessCheckInterval     time.Duration
