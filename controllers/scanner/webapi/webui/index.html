@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Telegram NDA Guard — Dashboard</title>
+  <style>
+    :root { --bg:#0f1115; --card:#171a21; --border:#262b36; --text:#e6e9ef; --muted:#8a93a3; --accent:#4a90d9; --green:#3fb950; --red:#f85149; --amber:#d29922; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+    header { padding:16px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:16px; }
+    header h1 { font-size:18px; margin:0; font-weight:600; }
+    header .who { margin-left:auto; color:var(--muted); font-size:13px; }
+    .wrap { max-width:1100px; margin:0 auto; padding:24px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px; margin-bottom:16px; }
+    .card h2 { margin:0 0 12px; font-size:15px; font-weight:600; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; }
+    .flag { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:12px; background:#1f2430; }
+    .flag.on { color:var(--green); } .flag.off { color:var(--muted); }
+    .right { display:flex; gap:8px; font-size:12px; color:var(--muted); }
+    .right .ok { color:var(--green); } .right .no { color:var(--red); }
+    button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:7px 14px; font-size:13px; cursor:pointer; }
+    button.ghost { background:transparent; border:1px solid var(--border); color:var(--text); }
+    button:hover { opacity:.85; }
+    .login { display:flex; align-items:center; justify-content:center; min-height:80vh; flex-direction:column; gap:16px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+    .pill { padding:2px 8px; border-radius:10px; font-size:11px; }
+    .pill.g { background:#1a2e1e; color:var(--green); } .pill.b { background:#2e1a1a; color:var(--red); } .pill.u { background:#2e261a; color:var(--amber); }
+    #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#222; border:1px solid var(--border); padding:10px 18px; border-radius:8px; opacity:0; transition:opacity .2s; }
+    #toast.show { opacity:1; }
+    .center { text-align:center; color:var(--muted); padding:40px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

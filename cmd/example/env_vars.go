@@ -25,4 +25,7 @@ type environmentConfig struct {
 	// administrators of the controlling chat. When false (default), commands
 	// remain open to all members (backwards-compatible).
 	RequireAdminAuth bool `env:"REQUIRE_ADMIN_AUTH"`
+	// Web management API (optional). When WebAddr is empty, the web UI is disabled.
+	WebAddr         string `env:"WEB_ADDR"`
+	WebSessionSecret string `env:"WEB_SESSION_SECRET"`
 }

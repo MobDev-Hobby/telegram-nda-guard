@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -16,6 +17,7 @@ import (
 	demochecker "github.com/MobDev-Hobby/telegram-nda-guard/checker/demo"
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner"
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner/authorizer"
+	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner/webapi"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/kicker"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/reporter"
 	redischanstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/channels/redis"
@@ -41,7 +43,9 @@ func main() {
 
 	defer func() {
 		if panicErr := recover(); panicErr != nil {
-			logger.Error(ctx, panicErr)
+			// SugaredLogger.Error takes variadic args, not a context;
+			// passing ctx logged a noisy struct dump instead of the panic.
+			logger.Error(panicErr)
 		}
 	}()
 
@@ -56,6 +60,16 @@ func main() {
 		logger.Panicf("can't parse env options: %s", err)
 	}
 
+	// Validate the AES key length explicitly: AES only accepts 16/24/32-byte
+	// keys. aes.NewCipher would reject other lengths, but a clear message
+	// helps operators diagnose a misconfigured SESSION_KEY.
+	sessionKeyLen := len(options.SessionKey)
+	if sessionKeyLen != 16 && sessionKeyLen != 24 && sessionKeyLen != 32 {
+		logger.Panicf(
+			"invalid SESSION_KEY length %d: AES key must be 16, 24 or 32 bytes",
+			sessionKeyLen,
+		)
+	}
 	cryptoProvider, err := aes.NewCipher(
 		[]byte(options.SessionKey),
 	)
@@ -143,12 +157,21 @@ func main() {
 		reporter.WithLogger(logger.Named("scan-report-processor")),
 	)
 
+	// The kicker must go through a rate-limited, FLOOD_WAIT-aware restrictor.
+	// Previously it held the raw *bot.Bot and hit BanChatMember/UnbanChatMember
+	// with no throttling — the most reliable way to get the account banned.
+	kickerRestrictor := ratelimited.NewRestrictor(
+		telegramBotDomain,
+		1*time.Second,
+		5,
+		ratelimited.WithRestrictorLogger(logger.Named("kicker-restrictor")),
+	)
 	cleanReporter := kicker.New(
-		telegramBotDomain.GetBot(),
+		kickerRestrictor,
 		kicker.WithLogger(logger.Named("clean-report-processor")),
 		kicker.WithCleanMessages(options.HideMessagesForKickedUsers),
 		kicker.WithKeepBanned(options.KeepKickedUsersBanned),
-		kicker.WithKeepBanned(options.KickUnknownUsers),
+		kicker.WithCleanUnknown(options.KickUnknownUsers),
 	)
 
 	channels := make([]scanner.ProtectedChannel, 0, len(options.Channels))
@@ -208,6 +231,39 @@ func main() {
 		cachedUserBotDomain,
 		controllerOptions...,
 	)
+
+	// Optional web management dashboard. The same HybridAuthorizer serves both
+	// the Telegram Authorizer and the WebAuthenticator roles, so web users are
+	// authorized against the same owner/allowlist/admin policy.
+	if options.WebAddr != "" {
+		webAuth := authorizer.New(telegramBotDomain,
+			authorizer.WithOwner(options.AdminChatID),
+			authorizer.WithLogger(logger.Named("web-authorizer")),
+		)
+		webSecret := []byte(options.WebSessionSecret)
+		if len(webSecret) < 32 {
+			logger.Panicf("WEB_SESSION_SECRET must be at least 32 bytes when WEB_ADDR is set")
+		}
+		webServer, err := webapi.New(
+			ProtectorControllerDomain,
+			webAuth,
+			options.TelegramBotKey,
+			webSecret,
+			webapi.WithLogger(logger.Named("webapi")),
+		)
+		if err != nil {
+			logger.Panicf("can't init web api: %s", err)
+		}
+		// Wait for the controller to finish initializing before serving, then
+		// run until the context is cancelled.
+		go func() {
+			<-ProtectorControllerDomain.Ready()
+			logger.Infof("Web dashboard starting on %s", options.WebAddr)
+			if err := webServer.ListenAndServe(options.WebAddr); err != nil {
+				logger.Errorf("web api stopped: %s", err)
+			}
+		}()
+	}
 
 	err = ProtectorControllerDomain.Run(ctx)
 	if err != nil {

@@ -66,6 +66,9 @@ func (d *Domain) Run(
 	d.log.Infof("Initialization completed, now bot is ready to go")
 	d.notifySuccessRun(ctx)
 
+	// Signal readiness to HTTP/management surfaces.
+	d.readyClose.Do(func() { close(d.ready) })
+
 	return nil
 }
 
