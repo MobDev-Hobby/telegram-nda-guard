@@ -44,9 +44,27 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   `Drop` when a channel is fully detached (no remaining controlling chats) and
   `Store` when its set of controlling chats changes, so in-memory removals
   survive restarts.
+- `processors.CleanOptions` (`KeepBanned`, `CleanMessages`, `CleanUnknown`) and
+  an optional `AccessReport.CleanOptions` field, so cleanup behavior can be
+  configured per-channel instead of only process-wide.
+- `kicker.UserRestrictor` — a transport-agnostic domain interface
+  (`SendReportMessage`, `Ban`, `Unban`) that the kicker consumes. The bundled
+  `telegram/bots/bot.Domain` implements it (`Ban`/`Unban`/`SendReportMessage`),
+  including the Bot API `-100` chat-ID normalization that previously lived
+  inside the kicker.
+- `scanner.ProtectedChannel.CleanOptions` (`*processors.CleanOptions`) —
+  per-channel cleanup overrides forwarded into the cleaner's `AccessReport`.
 - Established this `CHANGELOG.md` and the migration-note convention documented
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
+
+### Changed
+
+- **`kicker.New` now takes a `UserRestrictor` instead of `*bot.Bot`.** The
+  kicker no longer imports `github.com/go-telegram/bot`; it operates purely on
+  domain types. Per-channel `CleanOptions` (when present) override the
+  kicker's process-wide defaults.
+- `kicker.TelegramBotUserKicker` is **removed** in favor of `UserRestrictor`.
 
 ### Fixed
 
@@ -54,6 +72,9 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   `controllers/scanner` (a controller→storage dependency in reverse) and used
   `scanner.ProtectedChannel`. It now accepts a plain `channelID int64` and uses
   only the storage layer, removing the dependency cycle.
+- `cmd/example/main.go` called `kicker.WithKeepBanned(options.KickUnknownUsers)`
+  twice; the second call should have been `kicker.WithCleanUnknown(...)`, so the
+  "kick unknown users" flag was silently ignored. Fixed.
 
 ### Migration
 
@@ -67,6 +88,15 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 - `redis.Domain.Drop` changed its signature from
   `Drop(ctx, *scanner.ProtectedChannel)` to `Drop(ctx, channelID int64)`.
   Anyone calling the old (previously unused) method must update the call site.
+- **`kicker.New(restrictor UserRestrictor, opts...)`** — callers that passed
+  `telegramBotDomain.GetBot()` (`*bot.Bot`) must now pass the bot **domain**
+  (`telegramBotDomain`), which implements `UserRestrictor`.
+- Any custom type passed to the kicker must implement the new
+  `UserRestrictor` interface (`SendReportMessage`, `Ban`, `Unban`). The old
+  `TelegramBotUserKicker` interface is gone.
+- Optional: to enable per-channel cleanup behavior, set
+  `scanner.ProtectedChannel.CleanOptions`. Otherwise the kicker's configured
+  defaults apply as before.
 
 ---
 

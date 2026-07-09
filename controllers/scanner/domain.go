@@ -20,10 +20,17 @@ type Domain struct {
 
 	processingThreads int
 
-	commandChannels    map[int64][]int64
-	protectedChannels  map[int64]ProtectedChannel
-	channels           map[int64]ChannelInfo
-	addChannelHandlers map[int]int64
+	commandChannels         map[int64][]int64
+	protectedChannels       map[int64]ProtectedChannel
+	channels                map[int64]ChannelInfo
+	addChannelHandlers      map[int]int64
+	addChannelRequestCounter int32
+
+	// channelsMutex guards commandChannels, protectedChannels, channels and
+	// addChannelHandlers. All four are read/written concurrently from the
+	// access-rights checker, the scan worker pool, the ticker goroutine and
+	// the per-update Telegram handlers.
+	channelsMutex sync.RWMutex
 
 	accessCheckInterval     time.Duration
 	channelAutoScanInterval time.Duration
