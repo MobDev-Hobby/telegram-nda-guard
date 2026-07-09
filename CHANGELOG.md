@@ -74,6 +74,13 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 - **Channel removal UI.** New `/remove <id>` command with a two-step inline
   confirmation (`/rmconfirm <id>`). Detaching a channel is now possible from
   the bot; previously `CleanProtectedChannel` existed but was dead code.
+- **Web management dashboard.** New transport-neutral `scanner.ManagementService`
+  interface (implemented by `*Domain`), a `scanner.WebAuthenticator` interface,
+  and the `controllers/scanner/webapi` package — a JSON REST API + embedded SPA
+  dashboard authenticated via the Telegram Login Widget. The same
+  `HybridAuthorizer` serves both the Telegram `Authorizer` and the
+  `WebAuthenticator` roles. Enabled in `cmd/example` via `WEB_ADDR` +
+  `WEB_SESSION_SECRET`. `Domain.Ready()` signals initialization completion.
 - Established this `CHANGELOG.md` and the migration-note convention documented
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
@@ -130,6 +137,12 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   `telegram/bots/bot.Domain` already provides it.
 - Optional, non-breaking: to restrict who can run commands, pass
   `scanner.WithAuthorizer(...)`. Without it, behavior is unchanged.
+- **Web dashboard (optional):** to enable the management API, set `WEB_ADDR`
+  (e.g. `:8080`) and `WEB_SESSION_SECRET` (>=32 bytes) in `cmd/example`. The
+  dashboard is off by default. `scanner.ManagementService` and
+  `scanner.WebAuthenticator` are new interfaces; `*Domain` implements the
+  former, and the bundled `HybridAuthorizer` implements both. No existing
+  consumer is forced to adopt them.
 
 ---
 

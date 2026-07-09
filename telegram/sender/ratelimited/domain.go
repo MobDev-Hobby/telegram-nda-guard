@@ -1,6 +1,7 @@
 package ratelimited
 
 import (
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -10,6 +11,7 @@ import (
 type Domain struct {
 	log                  Logger
 	botClient            TelegramBotMessageSender
+	mu                   sync.Mutex
 	rateLimitByChannelID map[int64]*rate.Limiter
 	rateLimitTotal       *rate.Limiter
 }
@@ -29,4 +31,24 @@ func New(botClient TelegramBotMessageSender, opts ...Option) *Domain {
 	}
 
 	return d
+}
+
+// getLimiter returns the per-chat limiter, creating it if absent, under the
+// lock. The map is read/written from concurrent SendMessage calls, so it
+// must be guarded to avoid a fatal data race.
+func (d *Domain) getLimiter(chatID int64) *rate.Limiter {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	limit, found := d.rateLimitByChannelID[chatID]
+	if !found {
+		// Telegram allows ~20 messages per chat per minute; we cap at 15 for
+		// clock-skew safety. rate.Every sets the per-token refill interval,
+		// so for "15 per minute" the interval is a minute divided by 15.
+		// Using rate.Every(time.Minute) would refill only 1 token/min, i.e.
+		// stall at ~1 msg/min after the burst.
+		// https://core.telegram.org/bots/faq#my-bot-is-hitting-limits-how-do-i-avoid-this
+		limit = rate.NewLimiter(rate.Every(time.Minute/15), 15)
+		d.rateLimitByChannelID[chatID] = limit
+	}
+	return limit
 }
