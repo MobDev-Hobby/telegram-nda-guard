@@ -15,11 +15,13 @@ jobs:
     # `go env -w`, but CI must not depend on a private proxy.
     env:
       GOPROXY: https://proxy.golang.org,direct
-      GOFLAGS: -mod=mod
+      # readonly, not mod: CI must fail on an out-of-date go.mod/go.sum
+      # instead of silently rewriting them into a state nobody committed.
+      GOFLAGS: -mod=readonly
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -38,17 +40,37 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GOPROXY: https://proxy.golang.org,direct
-      GOFLAGS: -mod=mod
+      GOFLAGS: -mod=readonly
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned on purpose: with `latest`, any upstream release that adds
+          # a check turns a green build red without a commit of ours.
+          version: v2.12.2
           args: --timeout=5m
+
+  vulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    env:
+      GOPROXY: https://proxy.golang.org,direct
+      GOFLAGS: -mod=readonly
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Unpinned by design: the point of the check is the current vuln DB.
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

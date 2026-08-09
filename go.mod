@@ -1,8 +1,6 @@
 module github.com/MobDev-Hobby/telegram-nda-guard
 
-go 1.23.0
-
-toolchain go1.23.1
+go 1.26.0
 
 require (
 	github.com/caarlos0/env/v11 v11.2.2
