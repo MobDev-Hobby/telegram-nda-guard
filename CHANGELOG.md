@@ -29,7 +29,9 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ## [Unreleased]
 
-Both batches below ship together in the next tag (0.4.0).
+## [0.4.0] — 2026-09-25
+
+Both batches below ship in this release.
 
 ### Channels, Mini App, per-channel cleanup (September 2026)
 
@@ -173,7 +175,7 @@ Both batches below ship together in the next tag (0.4.0).
   client for the audit log needs `ListPush`/`ListRange`.
 - Mini App users must **Join** each channel once before managing it
   (`ProtectedChannel.Managers` starts empty).
-- Release as **0.4.0** (pre-1.0 minor: contains the breaking changes above).
+- This is a pre-1.0 minor release: it contains the breaking changes above.
 - Mini App (optional): serve `webapi.Server` over public HTTPS, pass
   `webapi.WithMiniApp(domain, hybridAuthorizer)` and
   `scanner.WithUserKicker(kicker)`, `scanner.WithDefaultCleanOptions(kicker.DefaultCleanOptions())`,
