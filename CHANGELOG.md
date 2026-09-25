@@ -150,6 +150,30 @@ Both batches below ship together in the next tag (0.4.0).
   that configuration now removes users.
 - Custom `Authorizer` implementations should read `CallbackQuery.From` for
   callbacks (see Security).
+- **`telegram/bots/bot.New` now requests only `message`, `callback_query`,
+  `my_chat_member` and `chat_join_request` updates** (explicit
+  `allowed_updates`; Telegram used to reuse whatever list was set last). If
+  you register your own handlers for other update types (e.g. `channel_post`,
+  `chat_member`), they stop receiving updates; build the bot with your own
+  list instead.
+- `guard.CallbackQuery` and `telegram/userbots/userbot.Domain` are no longer
+  comparable (`==`), because of the new `From` field and internal state.
+- Scan workers now really run in parallel (`WithNProcessingThreads`, default
+  4): expect up to that many concurrent member listings and checker calls.
+- `HybridAuthorizer` caches chat admin lists for a minute
+  (`WithAdminCacheTTL(0)` restores a lookup per command); a demoted admin
+  keeps access up to that long.
+- Bot commands that take a channel id (`/settings`, `/setflag`, `/users`,
+  `/remove`, `/rmconfirm`) now go through the authorizer and must come from a
+  control chat of that channel; `/add` in a private chat is allowed for anyone
+  who passes the default access checker.
+- Storage: new optional ports (`WithWhitelistStorage`, `WithAuditStorage`,
+  `WithKnownChatStorage`, `WithJoinRequestStorage`); records in `pChannel`
+  gain optional fields and stay readable by older versions. A custom Redis
+  client for the audit log needs `ListPush`/`ListRange`.
+- Mini App users must **Join** each channel once before managing it
+  (`ProtectedChannel.Managers` starts empty).
+- Release as **0.4.0** (pre-1.0 minor: contains the breaking changes above).
 - Mini App (optional): serve `webapi.Server` over public HTTPS, pass
   `webapi.WithMiniApp(domain, hybridAuthorizer)` and
   `scanner.WithUserKicker(kicker)`, `scanner.WithDefaultCleanOptions(kicker.DefaultCleanOptions())`,
