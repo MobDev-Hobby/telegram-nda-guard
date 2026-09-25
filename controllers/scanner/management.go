@@ -34,6 +34,12 @@ type ChannelView struct {
 	WhitelistEnabled bool `json:"whitelistEnabled"`
 	// WhitelistTTLDays is how long an approval lasts.
 	WhitelistTTLDays int `json:"whitelistTtlDays,omitempty"`
+	// JoinRequests is the join request mode; JoinRequestsEnabled tells
+	// whether the manager is available at all.
+	JoinRequests        string `json:"joinRequests"`
+	JoinRequestsEnabled bool   `json:"joinRequestsEnabled"`
+	// Health is the channel's traffic light.
+	Health ChannelHealth `json:"health"`
 }
 
 // CanScan reports whether the bot can scan this channel (is a member).

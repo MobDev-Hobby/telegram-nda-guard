@@ -88,9 +88,14 @@ func (s *Server) verifyTelegramLogin(values map[string]string, maxAge time.Durat
 
 // newSessionToken builds a signed session token for callerID.
 func (s *Server) newSessionToken(callerID int64) string {
+	return s.newSessionTokenTTL(callerID, s.cookieTTL)
+}
+
+// newSessionTokenTTL builds a signed session token valid for ttl.
+func (s *Server) newSessionTokenTTL(callerID int64, ttl time.Duration) string {
 	payload := make([]byte, sessionLen)
 	binary.BigEndian.PutUint64(payload[0:8], uint64(callerID))
-	binary.BigEndian.PutUint64(payload[8:16], uint64(time.Now().Add(s.cookieTTL).Unix()))
+	binary.BigEndian.PutUint64(payload[8:16], uint64(time.Now().Add(ttl).Unix()))
 	mac := hmac.New(sha256.New, s.sessionSecret)
 	mac.Write(payload[0:16])
 	copy(payload[16:], mac.Sum(nil))

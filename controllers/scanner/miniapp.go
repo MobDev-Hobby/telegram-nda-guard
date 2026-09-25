@@ -6,12 +6,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"html"
 	"sort"
 	"strings"
 	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/audit"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/knownchats"
 )
 
 const (
@@ -32,6 +35,9 @@ const (
 	UserStatusUnknown = "unknown"
 	UserStatusGood    = "good"
 	UserStatusKicked  = "kicked"
+	// UserStatusWhitelisted: the user is on the channel's whitelist and is not
+	// checked or removed (even when the approval is overdue for review).
+	UserStatusWhitelisted = "whitelisted"
 )
 
 // Scan states.
@@ -69,6 +75,8 @@ type ChannelSettings struct {
 	KeepBanned    bool `json:"keepBanned"`
 	CleanMessages bool `json:"cleanMessages"`
 	CleanUnknown  bool `json:"cleanUnknown"`
+	// JoinRequests is the join request mode: off, auto or manual.
+	JoinRequests string `json:"joinRequests"`
 }
 
 // ScannedUser is one member in a scan result. Phone numbers are deliberately
@@ -83,8 +91,21 @@ type ScannedUser struct {
 	// Protected users (channel admins, the bot itself) can't be kicked.
 	Protected bool   `json:"protected,omitempty"`
 	Note      string `json:"note,omitempty"`
-	// WhitelistedUntil is set for users with an active whitelist approval.
-	WhitelistedUntil *time.Time `json:"whitelistedUntil,omitempty"`
+	// Whitelist is set for users on the channel's whitelist.
+	Whitelist *ScannedWhitelist `json:"whitelist,omitempty"`
+	// Check is the access checker's own verdict (good/bad/unknown) from the
+	// latest explicit recheck; for whitelisted users it tells whether they
+	// would pass without the whitelist.
+	Check     string     `json:"check,omitempty"`
+	CheckedAt *time.Time `json:"checkedAt,omitempty"`
+}
+
+// ScannedWhitelist is a scanned user's whitelist entry.
+type ScannedWhitelist struct {
+	Until    time.Time  `json:"until"`
+	Expired  bool       `json:"expired"`
+	Note     string     `json:"note,omitempty"`
+	DeleteAt *time.Time `json:"deleteAt,omitempty"`
 }
 
 // noteWhitelisted marks users protected by an active whitelist approval.
@@ -116,7 +137,7 @@ type MiniAppService interface {
 	ListChannels(ctx context.Context, commandChatID int64) ([]ChannelView, error)
 	GetChannel(ctx context.Context, channelID int64) (ChannelView, error)
 	// SetChannelSettings replaces every per-channel setting at once.
-	SetChannelSettings(ctx context.Context, channelID int64, settings ChannelSettings) error
+	SetChannelSettings(ctx context.Context, channelID int64, settings ChannelSettings, callerID int64) error
 	// StartChannelScan lists and classifies the channel's members in the
 	// background. A scan already running for the channel is returned instead
 	// of starting another.
@@ -126,14 +147,52 @@ type MiniAppService interface {
 	// given scan can be kicked, never protected ones.
 	KickScannedUsers(ctx context.Context, channelID int64, scanID string, userIDs []int64, callerID int64) ([]processors.KickResult, error)
 
+	// RecheckScannedUser runs the access checker again for one scanned user,
+	// bypassing its cache and the whitelist.
+	RecheckScannedUser(ctx context.Context, channelID int64, scanID string, userID, callerID int64) (ScannedUser, error)
+
 	// ListWhitelist returns the channel's whitelist, expired entries included.
 	ListWhitelist(ctx context.Context, channelID int64) ([]WhitelistEntryView, error)
 	// AddToWhitelist approves users from a scan of the channel for the
-	// whitelist period.
-	AddToWhitelist(ctx context.Context, channelID int64, scanID string, userIDs []int64, callerID int64) ([]WhitelistEntryView, error)
-	// RenewWhitelistEntry re-approves a user for another period.
-	RenewWhitelistEntry(ctx context.Context, channelID, userID, callerID int64) (WhitelistEntryView, error)
+	// whitelist period, with the approver's note.
+	// ttl > 0 makes the approval temporary: the entry is removed after ttl.
+	AddToWhitelist(ctx context.Context, channelID int64, scanID string, userIDs []int64, note string, ttl time.Duration, callerID int64) ([]WhitelistEntryView, error)
+	// RenewWhitelistEntry re-approves a user for another period; a non-empty
+	// note replaces the previous one and ttl > 0 sets a new end.
+	RenewWhitelistEntry(ctx context.Context, channelID, userID int64, note string, ttl time.Duration, callerID int64) (WhitelistEntryView, error)
 	RemoveWhitelistEntry(ctx context.Context, channelID, userID, callerID int64) error
+
+	// CanUseMiniApp tells whether user may use the Mini App at all: only
+	// people who pass the access checker (employees) may.
+	CanUseMiniApp(ctx context.Context, user guard.User) (bool, error)
+	// NoteUserName remembers a display name for logs and messages.
+	NoteUserName(userID int64, name string)
+	// IsChannelManager tells whether userID joined the channel in the bot.
+	IsChannelManager(channelID, userID int64) bool
+	// JoinChannel makes a channel administrator a manager of it in the bot.
+	JoinChannel(ctx context.Context, channelID, callerID int64) error
+	// ListAudit returns the channel's action log, newest first.
+	ListAudit(ctx context.Context, channelID int64, limit int) ([]audit.Event, error)
+
+	// ListAvailableChats returns chats where the bot is an administrator but
+	// which are not protected yet.
+	ListAvailableChats(ctx context.Context) ([]knownchats.Chat, error)
+	// ConnectChat protects such a chat, with the caller as manager.
+	ConnectChat(ctx context.Context, chatID, callerID int64) error
+	// BotUsername is used to open the bot's private chat from the app.
+	BotUsername() string
+
+	// ListJoinRequests returns pending requests to join the channel.
+	ListJoinRequests(ctx context.Context, channelID int64) ([]JoinRequestView, error)
+	// ResolveJoinRequests approves or declines pending requests.
+	ResolveJoinRequests(ctx context.Context, channelID int64, userIDs []int64, approve bool, callerID int64) ([]JoinResult, error)
+	// RecheckJoinRequest runs the checker again for one requester.
+	RecheckJoinRequest(ctx context.Context, channelID, userID, callerID int64) (JoinRequestView, error)
+}
+
+// BotUsername implements MiniAppService.
+func (d *Domain) BotUsername() string {
+	return d.telegramBot.Username()
 }
 
 var _ MiniAppService = (*Domain)(nil)
@@ -144,8 +203,15 @@ type scanJob struct {
 }
 
 // SetChannelSettings implements MiniAppService.
-func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settings ChannelSettings) error {
-	return d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
+func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settings ChannelSettings, callerID int64) error {
+	if !validJoinMode(settings.JoinRequests) {
+		return ErrBadJoinMode
+	}
+	if settings.JoinRequests != "" && settings.JoinRequests != JoinModeOff && d.joinRequestStorage == nil {
+		return ErrJoinRequestsDisabled
+	}
+	err := d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
+		pc.JoinRequestMode = settings.JoinRequests
 		pc.AutoScan = settings.AutoScan
 		pc.AutoClean = settings.AutoClean
 		pc.AllowClean = settings.AllowClean
@@ -155,6 +221,19 @@ func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settin
 			CleanUnknown:  settings.CleanUnknown,
 		}
 	})
+	if err != nil {
+		return err
+	}
+	pc, _ := d.getProtectedChannel(channelID)
+	d.recordAudit(ctx, pc, audit.Event{
+		ActorID: callerID, Action: audit.ActionSettingsChanged,
+		Details: map[string]any{
+			"autoScan": settings.AutoScan, "autoClean": settings.AutoClean, "allowClean": settings.AllowClean,
+			"keepBanned": settings.KeepBanned, "cleanMessages": settings.CleanMessages, "cleanUnknown": settings.CleanUnknown,
+			"joinRequests": settings.JoinRequests,
+		},
+	}, fmt.Sprintf("Settings of %s changed by %s.", html.EscapeString(d.channelTitle(channelID)), actorLink(callerID, d.userName(callerID))))
+	return nil
 }
 
 // StartChannelScan implements MiniAppService.
@@ -202,8 +281,10 @@ func (d *Domain) StartChannelScan(_ context.Context, channelID, callerID int64) 
 	view := job.view
 	d.scansMutex.Unlock()
 
-	// The scan outlives the HTTP request that started it.
-	go d.runScanJob(job, d.withWhitelist(channelID, checker))
+	// The scan outlives the HTTP request that started it. Whitelisted users
+	// are marked separately, so the scan uses the plain checker and skips
+	// them.
+	go d.runScanJob(job, checker)
 	return view, nil
 }
 
@@ -258,35 +339,23 @@ func (d *Domain) runScanJob(job *scanJob, checker CheckUserAccess) {
 			return
 		}
 		user := user
-		status := UserStatusGood
-		hasAccess, err := checker.HasAccess(ctx, &user)
-		switch {
-		case err != nil:
-			status = UserStatusUnknown
-		case !hasAccess:
-			status = UserStatusBad
-		}
 		note, isProtected := protected[user.ID]
-		var whitelistedUntil *time.Time
-		if entry, ok := d.activeWhitelistEntry(ctx, channelID, user.ID); ok {
-			until := entry.ExpiresAt
-			whitelistedUntil = &until
-			if !isProtected {
-				// Whitelisted users can't be ticked for removal; to remove
-				// one, take them off the whitelist first.
-				isProtected, note = true, noteWhitelisted
-			}
+		su := ScannedUser{
+			ID:        user.ID,
+			FirstName: user.FirstName,
+			LastName:  user.LastName,
+			Username:  user.Username,
+			Protected: isProtected,
+			Note:      note,
 		}
-		scanned = append(scanned, ScannedUser{
-			ID:               user.ID,
-			FirstName:        user.FirstName,
-			LastName:         user.LastName,
-			Username:         user.Username,
-			Status:           status,
-			Protected:        isProtected,
-			Note:             note,
-			WhitelistedUntil: whitelistedUntil,
-		})
+		if entry, ok := d.whitelistEntry(ctx, channelID, user.ID); ok {
+			// Whitelisted users are not checked and can't be ticked for
+			// removal; to remove one, take them off the whitelist first.
+			markWhitelisted(&su, entry, d.now())
+		} else {
+			su.Status = checkStatus(checker.HasAccess(ctx, &user))
+		}
+		scanned = append(scanned, su)
 		byID[user.ID] = user
 
 		d.scansMutex.Lock()
@@ -298,6 +367,18 @@ func (d *Domain) runScanJob(job *scanJob, checker CheckUserAccess) {
 		return statusOrder(scanned[i].Status) < statusOrder(scanned[j].Status)
 	})
 
+	// Record the outcome before publishing "done", so a client that sees the
+	// finished scan also sees the channel's updated health.
+	summary := summarizeScan(ScanView{Users: scanned, Partial: stats.Partial()}, d.now())
+	d.recordCheck(ctx, channelID, summary)
+	if pc, ok := d.getProtectedChannel(channelID); ok {
+		d.recordAudit(ctx, pc, audit.Event{
+			ActorID: job.view.StartedBy, Action: audit.ActionScanCompleted,
+			Counts:  summaryCounts(summary),
+			Details: map[string]any{"source": "miniapp", "partial": summary.Partial},
+		}, "")
+	}
+
 	d.scansMutex.Lock()
 	now := time.Now()
 	job.users = byID
@@ -307,6 +388,111 @@ func (d *Domain) runScanJob(job *scanJob, checker CheckUserAccess) {
 	job.view.State = ScanStateDone
 	job.view.FinishedAt = &now
 	d.scansMutex.Unlock()
+}
+
+// checkStatus maps a checker verdict to a scan status.
+func checkStatus(hasAccess bool, err error) string {
+	switch {
+	case err != nil:
+		return UserStatusUnknown
+	case !hasAccess:
+		return UserStatusBad
+	default:
+		return UserStatusGood
+	}
+}
+
+// summarizeScan counts a scan's current statuses for the health indicator.
+// Kicked users no longer count as violations. Caller holds scansMutex.
+func summarizeScan(view ScanView, now time.Time) processors.CheckSummary {
+	s := processors.CheckSummary{At: now, Partial: view.Partial}
+	for _, u := range view.Users {
+		switch u.Status {
+		case UserStatusGood:
+			s.Good++
+		case UserStatusBad:
+			s.Bad++
+		case UserStatusUnknown:
+			s.Unknown++
+		case UserStatusWhitelisted:
+			s.Whitelisted++
+		}
+	}
+	return s
+}
+
+func summaryCounts(s processors.CheckSummary) map[string]int {
+	return map[string]int{"good": s.Good, "bad": s.Bad, "unknown": s.Unknown, "whitelisted": s.Whitelisted}
+}
+
+// RecheckScannedUser implements MiniAppService.
+func (d *Domain) RecheckScannedUser(ctx context.Context, channelID int64, scanID string, userID, callerID int64) (ScannedUser, error) {
+	pc, ok := d.getProtectedChannel(channelID)
+	if !ok {
+		return ScannedUser{}, fmt.Errorf("channel %d is not protected", channelID)
+	}
+	checker := pc.AccessChecker
+	if checker == nil {
+		checker = d.defaultAccessChecker
+	}
+	if checker == nil {
+		return ScannedUser{}, errors.New("no access checker configured")
+	}
+
+	d.scansMutex.Lock()
+	job, ok := d.scans[scanID]
+	if !ok || job.view.ChannelID != channelID || job.view.State != ScanStateDone {
+		d.scansMutex.Unlock()
+		return ScannedUser{}, ErrScanNotFound
+	}
+	user, ok := job.users[userID]
+	d.scansMutex.Unlock()
+	if !ok {
+		return ScannedUser{}, fmt.Errorf("user %d is not in this scan", userID)
+	}
+
+	// A recheck must ask the source again, not the cached verdict.
+	if invalidator, ok := checker.(interface{ Invalidate(userID int64) }); ok {
+		invalidator.Invalidate(userID)
+	}
+	verdict := checkStatus(checker.HasAccess(ctx, &user))
+	now := d.now()
+
+	d.scansMutex.Lock()
+	var updated ScannedUser
+	for i := range job.view.Users {
+		u := &job.view.Users[i]
+		if u.ID != userID {
+			continue
+		}
+		u.Check = verdict
+		u.CheckedAt = &now
+		if u.Status != UserStatusWhitelisted && u.Status != UserStatusKicked {
+			u.Status = verdict
+		}
+		updated = *u
+	}
+	summary := summarizeScan(job.view, now)
+	d.scansMutex.Unlock()
+
+	d.recordCheck(ctx, channelID, summary)
+	d.recordAudit(ctx, pc, audit.Event{
+		ActorID: callerID, Action: audit.ActionUserRechecked,
+		Users:   []audit.User{{ID: user.ID, Name: strings.TrimSpace(user.FirstName + " " + user.LastName), Username: user.Username}},
+		Details: map[string]any{"result": verdict, "whitelisted": updated.Status == UserStatusWhitelisted},
+	}, "")
+	return updated, nil
+}
+
+// CanUseMiniApp implements MiniAppService. It uses the default access checker
+// (the one that decides who may stay in channels), so only employees get in.
+// A failed check denies access.
+func (d *Domain) CanUseMiniApp(ctx context.Context, user guard.User) (bool, error) {
+	if d.defaultAccessChecker == nil {
+		return false, errors.New("no access checker configured")
+	}
+	d.NoteUserName(user.ID, strings.TrimSpace(user.FirstName+" "+user.LastName))
+	return d.defaultAccessChecker.HasAccess(ctx, &user)
 }
 
 // GetChannelScan implements MiniAppService.
@@ -395,7 +581,6 @@ func (d *Domain) KickScannedUsers(
 	kicked := d.userKicker.KickUsers(ctx, channel, toKick, pc.CleanOptions)
 	results = append(results, kicked...)
 
-	okCount := 0
 	d.scansMutex.Lock()
 	if job, ok := d.scans[scanID]; ok {
 		kickedIDs := make(map[int64]bool, len(kicked))
@@ -411,6 +596,7 @@ func (d *Domain) KickScannedUsers(
 		}
 	}
 	d.scansMutex.Unlock()
+	okCount := 0
 	for _, r := range kicked {
 		if r.OK {
 			okCount++
@@ -422,32 +608,49 @@ func (d *Domain) KickScannedUsers(
 			invalidator.InvalidateChannel(channelID)
 		}
 	}
-	d.reportManualKick(ctx, pc, channel, callerID, okCount, len(toKick))
+	d.scansMutex.Lock()
+	var summary processors.CheckSummary
+	if job, ok := d.scans[scanID]; ok {
+		summary = summarizeScan(job.view, d.now())
+	}
+	d.scansMutex.Unlock()
+	d.recordCheck(ctx, channelID, summary)
+	d.reportManualKick(ctx, pc, channel, callerID, kicked, toKick)
 	return results, nil
 }
 
-// reportManualKick leaves an audit trail of Mini App kicks in the control
-// chats, like the automatic clean reports do.
-func (d *Domain) reportManualKick(ctx context.Context, pc ProtectedChannel, channel guard.ChannelInfo, callerID int64, kicked, selected int) {
-	if selected == 0 {
+// reportManualKick leaves an audit trail of Mini App kicks in the log and in
+// the control chats, like the automatic clean reports do.
+func (d *Domain) reportManualKick(ctx context.Context, pc ProtectedChannel, channel guard.ChannelInfo, callerID int64, results []processors.KickResult, selected []guard.User) {
+	if len(selected) == 0 {
 		return
+	}
+	okIDs := make(map[int64]bool, len(results))
+	for _, r := range results {
+		if r.OK {
+			okIDs[r.UserID] = true
+		}
+	}
+	users := make([]audit.User, 0, len(okIDs))
+	for _, u := range selected {
+		if okIDs[u.ID] {
+			users = append(users, audit.User{ID: u.ID, Name: strings.TrimSpace(u.FirstName + " " + u.LastName), Username: u.Username})
+		}
 	}
 	text := fmt.Sprintf(
 		"<b>Manual clean of %s %s</b>\n\n"+
 			"Removed <b>%d/%d</b> selected users.\n"+
-			"Requested by <a href=\"tg://user?id=%d\">%d</a> via the Mini App.",
+			"Requested by %s via the Mini App.",
 		guard.ChatTypeNoun(channel.Type),
-		channel.Title,
-		kicked,
-		selected,
-		callerID,
-		callerID,
+		html.EscapeString(channel.Title),
+		len(users),
+		len(selected),
+		actorLink(callerID, d.userName(callerID)),
 	)
-	for _, chatID := range pc.CommandChannelIDs {
-		if err := d.telegramBot.SendMessage(ctx, &guard.Message{ChatID: chatID, Text: text}); err != nil {
-			d.log.Errorf("can't send manual clean report to %d: %s", chatID, err)
-		}
-	}
+	d.recordAudit(ctx, pc, audit.Event{
+		ActorID: callerID, Action: audit.ActionUsersKicked, Users: users,
+		Counts: map[string]int{"kicked": len(users), "selected": len(selected)},
+	}, text)
 }
 
 // expireScansLocked drops finished scans past their TTL and, when the store is
@@ -477,10 +680,12 @@ func statusOrder(status string) int {
 		return 0
 	case UserStatusUnknown:
 		return 1
-	case UserStatusKicked:
-		return 3
-	default:
+	case UserStatusWhitelisted:
 		return 2
+	case UserStatusKicked:
+		return 4
+	default:
+		return 3
 	}
 }
 

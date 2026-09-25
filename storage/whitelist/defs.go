@@ -18,15 +18,34 @@ type Entry struct {
 	ApprovedAt time.Time `json:"approvedAt"`
 	ExpiresAt  time.Time `json:"expiresAt"`
 
+	// Note is the approver's free-text reason.
+	Note string `json:"note,omitempty"`
+	// DeleteAt, when set, is when the entry is removed for good (a temporary
+	// approval). Until then the regular review every ExpiresAt still applies.
+	DeleteAt *time.Time `json:"deleteAt,omitempty"`
+
 	// RemindedFor is the ExpiresAt value a "expires soon" reminder was sent
 	// for, so each approval period is reminded about once.
 	RemindedFor time.Time `json:"remindedFor"`
-	// ExpiryNotified is set once the "expired" notice has been sent; cleared
-	// by re-approval.
-	ExpiryNotified bool `json:"expiryNotified,omitempty"`
+	// ExpiredRemindedAt is when the last "expired, please review" reminder
+	// went out; expired entries are reminded about daily.
+	ExpiredRemindedAt time.Time `json:"expiredRemindedAt"`
 }
 
-// Active reports whether the approval is still in force at now.
-func (e Entry) Active(now time.Time) bool {
-	return now.Before(e.ExpiresAt)
+// Expired reports whether the approval is past its term at now. An expired
+// entry still protects the user; it only asks for a review.
+func (e Entry) Expired(now time.Time) bool {
+	return !now.Before(e.ExpiresAt)
+}
+
+// Deleted reports whether a temporary entry has reached its end at now and no
+// longer applies.
+func (e Entry) Deleted(now time.Time) bool {
+	return e.DeleteAt != nil && !now.Before(*e.DeleteAt)
+}
+
+// ReviewDue reports whether the entry is removed before its next review, i.e.
+// the review reminder is moot.
+func (e Entry) EndsBeforeReview() bool {
+	return e.DeleteAt != nil && !e.DeleteAt.After(e.ExpiresAt)
 }

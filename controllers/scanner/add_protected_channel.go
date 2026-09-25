@@ -66,6 +66,9 @@ func (d *Domain) AddDefaultProtectedChannel(pc *ProtectedChannel) error {
 		AutoClean:            pc.AutoClean,
 		AllowClean:           pc.AllowClean,
 		CleanOptions:         pc.CleanOptions,
+		Managers:             pc.Managers,
+		LastCheck:            pc.LastCheck,
+		JoinRequestMode:      pc.JoinRequestMode,
 		AccessChecker:        d.defaultAccessChecker,
 		ScanReportProcessor:  d.defaultScanProcessor,
 		CleanReportProcessor: d.defaultCleanProcessor,
@@ -333,5 +336,8 @@ func storageRecord(pc ProtectedChannel) *channels.ProtectedChannel {
 		AutoClean:         pc.AutoClean,
 		AllowClean:        pc.AllowClean,
 		CleanOptions:      cleanOptions,
+		Managers:          append([]int64(nil), pc.Managers...),
+		LastCheck:         pc.LastCheck,
+		JoinRequestMode:   pc.JoinRequestMode,
 	}
 }

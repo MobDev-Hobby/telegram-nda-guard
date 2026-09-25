@@ -9,6 +9,7 @@ import (
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/audit"
 	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 )
 
@@ -179,6 +180,7 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		}
 		report.DeniedUsers = append(report.DeniedUsers, userReport)
 	}
+	d.recordRequestCheck(ctx, protectedChannel, request.requestType, report)
 	request.reportProcessor.ProcessReport(ctx, report)
 	d.log.Debugf("done check for channel [%d]%s", request.channelInfo.id, request.channelInfo.title)
 }
@@ -278,4 +280,37 @@ func (d *Domain) channelStats(channelID int64, fetched int) guard.ScanStats {
 		}
 	}
 	return guard.ScanStats{Fetched: fetched, Total: fetched}
+}
+
+// recordRequestCheck feeds a bot-side scan/clean into the health indicator
+// and the action log.
+func (d *Domain) recordRequestCheck(ctx context.Context, pc ProtectedChannel, requestType ScanRequestType, report processors.AccessReport) {
+	summary := processors.CheckSummary{
+		At:      d.now(),
+		Bad:     len(report.DeniedUsers),
+		Unknown: len(report.UnknownUsers),
+		Partial: report.Stats.Partial(),
+	}
+	for _, u := range report.AllowedUsers {
+		if _, ok := d.whitelistEntry(ctx, pc.ID, u.ID); ok {
+			summary.Whitelisted++
+		} else {
+			summary.Good++
+		}
+	}
+	d.recordCheck(ctx, pc.ID, summary)
+
+	action := audit.ActionScanCompleted
+	if requestType == Clean || requestType == AutoClean {
+		action = audit.ActionCleanCompleted
+	}
+	source := "manual"
+	if requestType == AutoScan || requestType == AutoClean {
+		source = "schedule"
+	}
+	d.recordAudit(ctx, pc, audit.Event{
+		Action:  action,
+		Counts:  summaryCounts(summary),
+		Details: map[string]any{"source": source, "partial": summary.Partial},
+	}, "")
 }

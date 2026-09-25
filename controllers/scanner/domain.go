@@ -8,6 +8,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/joinrequests"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/knownchats"
 	"github.com/MobDev-Hobby/telegram-nda-guard/storage/whitelist"
 )
 
@@ -64,6 +66,18 @@ type Domain struct {
 	whitelistRemindBefore time.Duration
 	whitelistMutex        sync.Mutex
 	whitelists            map[int64]map[int64]whitelist.Entry
+	auditStorage          AuditStorage
+	namesMutex            sync.Mutex
+	userNames             map[int64]string
+
+	knownChatStorage KnownChatStorage
+	knownMutex       sync.Mutex
+	knownChats       map[int64]knownchats.Chat
+
+	joinRequestStorage JoinRequestStorage
+	joinMutex          sync.Mutex
+	joinRequests       map[int64]map[int64]joinrequests.Request
+
 	// now is replaceable in tests.
 	now func() time.Time
 
@@ -117,6 +131,9 @@ func New(
 		whitelistRemindBefore: DefaultWhitelistRemindBefore,
 		whitelists:            make(map[int64]map[int64]whitelist.Entry),
 		now:                   time.Now,
+		userNames:             make(map[int64]string),
+		knownChats:            make(map[int64]knownchats.Chat),
+		joinRequests:          make(map[int64]map[int64]joinrequests.Request),
 	}
 
 	for _, opt := range opts {

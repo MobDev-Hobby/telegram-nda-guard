@@ -29,6 +29,9 @@ func (d *Domain) Run(
 				AutoClean:         protectedChannel.AutoClean,
 				AllowClean:        protectedChannel.AllowClean,
 				CleanOptions:      protectedChannel.CleanOptions,
+				Managers:          protectedChannel.Managers,
+				LastCheck:         protectedChannel.LastCheck,
+				JoinRequestMode:   protectedChannel.JoinRequestMode,
 			}
 			protectedChannel.CleanReportProcessor = d.defaultCleanProcessor
 			protectedChannel.ScanReportProcessor = d.defaultScanProcessor
@@ -36,6 +39,8 @@ func (d *Domain) Run(
 			d.AddDefaultProtectedChannel(&protectedChannel)
 		}
 	}
+
+	d.loadKnownChats(ctx)
 
 	d.log.Debugf("Run telegram bot")
 	err := d.telegramBot.Run(ctx)
@@ -65,6 +70,7 @@ func (d *Domain) Run(
 	d.log.Debugf("Setup user checker loop")
 	d.RunUserAccessChecker(ctx)
 	d.RunWhitelistReminders(ctx)
+	d.RunJoinRequestRechecks(ctx)
 
 	d.log.Infof("Initialization completed, now bot is ready to go")
 	d.notifySuccessRun(ctx)

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
 
 // webAppInitDataMaxAge bounds how old Mini App launch data may be. Telegram
@@ -28,14 +30,14 @@ const webAppInitDataMaxAge = 24 * time.Hour
 // data_check_string is every received field except hash, as sorted "k=v"
 // lines. Note the key order: the constant "WebAppData" is the HMAC key, which
 // differs from the Login Widget scheme (sha256(bot_token) as key).
-func verifyWebAppInitData(botToken, initData string, maxAge time.Duration, now time.Time) (int64, error) {
+func verifyWebAppInitData(botToken, initData string, maxAge time.Duration, now time.Time) (guard.User, error) {
 	values, err := url.ParseQuery(initData)
 	if err != nil {
-		return 0, fmt.Errorf("bad initData: %w", err)
+		return guard.User{}, fmt.Errorf("bad initData: %w", err)
 	}
 	gotHash := values.Get("hash")
 	if gotHash == "" {
-		return 0, errors.New("missing hash")
+		return guard.User{}, errors.New("missing hash")
 	}
 
 	lines := make([]string, 0, len(values))
@@ -53,22 +55,30 @@ func verifyWebAppInitData(botToken, initData string, maxAge time.Duration, now t
 	mac.Write([]byte(strings.Join(lines, "\n")))
 	wantHash := hex.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(gotHash), []byte(wantHash)) {
-		return 0, errors.New("invalid hash")
+		return guard.User{}, errors.New("invalid hash")
 	}
 
 	authDate, err := strconv.ParseInt(values.Get("auth_date"), 10, 64)
 	if err != nil {
-		return 0, errors.New("bad auth_date")
+		return guard.User{}, errors.New("bad auth_date")
 	}
 	if maxAge > 0 && now.Sub(time.Unix(authDate, 0)) > maxAge {
-		return 0, errors.New("initData expired")
+		return guard.User{}, errors.New("initData expired")
 	}
 
 	var user struct {
-		ID int64 `json:"id"`
+		ID        int64  `json:"id"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+		Username  string `json:"username"`
 	}
 	if err := json.Unmarshal([]byte(values.Get("user")), &user); err != nil || user.ID == 0 {
-		return 0, errors.New("initData has no user")
+		return guard.User{}, errors.New("initData has no user")
 	}
-	return user.ID, nil
+	return guard.User{
+		ID:        user.ID,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Username:  user.Username,
+	}, nil
 }

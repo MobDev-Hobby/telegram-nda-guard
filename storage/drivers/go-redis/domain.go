@@ -47,3 +47,23 @@ func (d *Domain) GetAllHashValues(ctx context.Context, hash string) (map[string]
 	}
 	return out, nil
 }
+
+func (d *Domain) ListPush(ctx context.Context, key string, value []byte, maxLen int64) error {
+	pipe := d.Client.TxPipeline()
+	pipe.LPush(ctx, key, value)
+	pipe.LTrim(ctx, key, 0, maxLen-1)
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (d *Domain) ListRange(ctx context.Context, key string, limit int64) ([][]byte, error) {
+	items, err := d.Client.LRange(ctx, key, 0, limit-1).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make([][]byte, 0, len(items))
+	for _, item := range items {
+		out = append(out, []byte(item))
+	}
+	return out, nil
+}

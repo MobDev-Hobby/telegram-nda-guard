@@ -57,6 +57,12 @@ func (d *Domain) fillCleanOptions(v *ChannelView, pc ProtectedChannel) {
 	v.KeepBanned = opts.KeepBanned
 	v.CleanMessages = opts.CleanMessages
 	v.CleanUnknown = opts.CleanUnknown
+	v.Health = channelHealth(pc.LastCheck, d.now())
+	v.JoinRequestsEnabled = d.joinRequestStorage != nil
+	v.JoinRequests = pc.JoinRequestMode
+	if v.JoinRequests == "" {
+		v.JoinRequests = JoinModeOff
+	}
 	v.WhitelistEnabled = d.whitelistStorage != nil
 	if v.WhitelistEnabled {
 		v.WhitelistTTLDays = int(d.whitelistTTL / (24 * time.Hour))

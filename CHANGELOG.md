@@ -51,12 +51,47 @@ Both batches below ship together in the next tag (0.4.0).
   `scanner.WithDefaultCleanOptions`, `scanner.WithMiniApp`, the `/app` command
   and a Mini App menu button. `webapi.Server.Handler()` exposes the handler
   for mounting into an existing server.
+- **Mini App v2.**
+  - *Employees only:* sign-in runs the default access checker on the Telegram
+    user; failures get `403 {"code":"not_employee"}`. Sessions last 1 hour
+    (`webapi.WithMiniAppSessionTTL`), so the check repeats.
+  - *Managers:* a channel's Telegram admins see it in the app; to manage it
+    they press **Join**, which adds them to `ProtectedChannel.Managers`
+    (persisted). All channel routes need admin + manager (or privileged);
+    managers get reminders in private.
+  - *Connect from the app:* chats where the bot became an admin
+    (`my_chat_member`, `WithKnownChatStorage`) and that aren't protected are
+    offered under **Available to connect**; **Add via bot** opens
+    `t.me/<bot>?start=add`, which runs `/add` in the private chat. In private
+    chats `/add` is allowed for anyone passing the checker — Telegram's picker
+    only lists chats the user administers.
+  - *Health traffic light:* `ChannelView.Health` — red for violations in the
+    last check or no check for 7 days, yellow for never / 3+ days, green
+    otherwise. Every scan (bot, schedule, Mini App), recheck and kick updates
+    `ProtectedChannel.LastCheck`.
+  - *Member traffic light & recheck:* scan statuses `good` / `whitelisted` /
+    `unknown` / `bad` / `kicked`; `POST …/scans/{id}/users/{uid}/recheck`
+    invalidates the checker cache (`checker/cached.Domain.Invalidate`) and
+    asks again, whitelisted users included (their `check` shows the raw
+    verdict).
+  - *Action log:* `WithAuditStorage` (`storage/audit/redis`, capped Redis
+    list, 500 per channel) records adds/joins/settings/scans/cleans/kicks/
+    rechecks/whitelist/join-request events; `GET …/audit`, shown in Settings.
+  - *Join request manager:* `WithJoinRequestStorage`,
+    `ChannelSettings.JoinRequests` = `off` | `auto` | `manual`. Auto approves
+    requesters who pass and leaves the rest pending, rechecking daily; manual
+    keeps them for managers (`…/joins`, `approve`, `decline`, recheck).
+    The Bot API can't list pending requests, so only ones arriving after
+    deploy are seen. Needs the bot's `can_invite_users`.
 - **Per-channel whitelist with periodic re-approval.** `scanner.WithWhitelistStorage`
   (+ `storage/whitelist` model and `storage/whitelist/redis`). Channel admins
   add users from a Mini App scan; an active entry makes the user pass every
   access check in that channel and protects them from Mini App kicks. An
-  approval lasts `WithWhitelistTTL` (default 30 days) and then stops working
-  until an admin re-approves it; expired entries stay listed. Control chats get
+    approval must be reviewed every `WithWhitelistTTL` (default 30 days); an
+  overdue entry keeps protecting the user and triggers a daily reminder to
+  the control chats and managers until renewed or removed. An optional term
+  (`ttlDays`, 1–365) makes an entry temporary: it is removed at the end of
+  the term. Entries carry the approver's note (≤500 chars). Control chats get
   a reminder `WithWhitelistRemindBefore` (default 3 days) ahead, a notice on
   expiry, and an audit message on every add/renew/remove. Mini App: a
   "Whitelist" tab and "Add to whitelist" in scan results; API

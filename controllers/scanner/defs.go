@@ -29,7 +29,13 @@ type ProtectedChannel struct {
 	AllowClean        bool
 	// CleanOptions overrides the clean processor's defaults for this channel.
 	// nil means "use the defaults".
-	CleanOptions         *processors.CleanOptions
+	CleanOptions *processors.CleanOptions
+	// Managers joined the channel in the bot (Mini App).
+	Managers []int64
+	// LastCheck is the latest member check, for the health indicator.
+	LastCheck *processors.CheckSummary
+	// JoinRequestMode handles requests to join (see JoinMode*).
+	JoinRequestMode      string
 	AccessChecker        CheckUserAccess     `json:",omitempty"`
 	ScanReportProcessor  UserReportProcessor `json:",omitempty"`
 	CleanReportProcessor UserReportProcessor `json:",omitempty"`

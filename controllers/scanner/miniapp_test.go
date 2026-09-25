@@ -263,7 +263,7 @@ func TestSetChannelSettingsPersistsCleanOptions(t *testing.T) {
 
 	require.NoError(t, d.SetChannelSettings(context.Background(), testChannelID, ChannelSettings{
 		AutoScan: true, AllowClean: true, KeepBanned: true, CleanUnknown: true,
-	}))
+	}, testAdminID))
 
 	rec := storage.records[testChannelID]
 	require.NotNil(t, rec.CleanOptions)

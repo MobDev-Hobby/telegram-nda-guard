@@ -94,6 +94,37 @@ type MessageReceived struct {
 type Update struct {
 	Message       *MessageReceived
 	CallbackQuery *CallbackQuery
+	// MyChatMember reports a change of the bot's own membership in a chat
+	// (added as admin, demoted, removed).
+	MyChatMember *BotMembership
+	// JoinRequest is a request to join a chat that approves new members.
+	JoinRequest *JoinRequest
+}
+
+// Bot membership statuses, as in the Bot API ChatMember "status".
+const (
+	MemberStatusAdministrator = "administrator"
+	MemberStatusMember        = "member"
+	MemberStatusLeft          = "left"
+	MemberStatusKicked        = "kicked"
+)
+
+// BotMembership is the bot's new status in a chat and who changed it.
+type BotMembership struct {
+	Chat   ChannelInfo
+	From   User
+	Status string
+	// Rights the bot got, when Status is administrator.
+	CanRestrictMembers bool
+	CanInviteUsers     bool
+}
+
+// JoinRequest is a user asking to join a chat.
+type JoinRequest struct {
+	Chat ChannelInfo
+	User User
+	At   int64 // unix seconds
+	Bio  string
 }
 
 type CallbackQuery struct {

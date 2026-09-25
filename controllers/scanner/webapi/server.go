@@ -53,8 +53,9 @@ type Server struct {
 	log           Logger
 	mux           *http.ServeMux
 
-	miniApp     scanner.MiniAppService
-	channelAuth ChannelAuthorizer
+	miniApp        scanner.MiniAppService
+	channelAuth    ChannelAuthorizer
+	miniAppSession time.Duration
 }
 
 // Option configures a Server.
@@ -104,7 +105,10 @@ func New(
 		sessionSecret: sessionSecret,
 		cookieName:    "tgndag_session",
 		cookieTTL:     7 * 24 * time.Hour,
-		log:           noopLogger{},
+		// Mini App sessions are short: the employee check runs again on
+		// every sign-in, so a leaver loses access within this window.
+		miniAppSession: time.Hour,
+		log:            noopLogger{},
 	}
 	for _, opt := range opts {
 		opt(s)

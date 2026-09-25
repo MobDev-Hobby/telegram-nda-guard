@@ -21,8 +21,11 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner/webapi"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/kicker"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/reporter"
+	redisaudit "github.com/MobDev-Hobby/telegram-nda-guard/storage/audit/redis"
 	redischanstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/channels/redis"
 	goredisadapter "github.com/MobDev-Hobby/telegram-nda-guard/storage/drivers/go-redis"
+	redisjoinrequests "github.com/MobDev-Hobby/telegram-nda-guard/storage/joinrequests/redis"
+	redisknownchats "github.com/MobDev-Hobby/telegram-nda-guard/storage/knownchats/redis"
 	filestorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/file"
 	redisstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis"
 	rediswhitelist "github.com/MobDev-Hobby/telegram-nda-guard/storage/whitelist/redis"
@@ -258,6 +261,9 @@ func main() {
 			// Per-channel whitelists, managed from the Mini App; approvals
 			// expire after 30 days unless re-approved.
 			scanner.WithWhitelistStorage(rediswhitelist.New(redisClient)),
+			scanner.WithAuditStorage(redisaudit.New(redisClient)),
+			scanner.WithKnownChatStorage(redisknownchats.New(redisClient)),
+			scanner.WithJoinRequestStorage(redisjoinrequests.New(redisClient)),
 		)
 	}
 

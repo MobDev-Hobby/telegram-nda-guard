@@ -59,7 +59,33 @@ func castUpdate(update *models.Update) *guard.Update {
 		}
 	}
 
+	if m := update.MyChatMember; m != nil {
+		membership := &guard.BotMembership{
+			Chat:   guard.ChannelInfo{ID: m.Chat.ID, Title: m.Chat.Title, Type: string(m.Chat.Type)},
+			From:   castUser(m.From),
+			Status: string(m.NewChatMember.Type),
+		}
+		if a := m.NewChatMember.Administrator; a != nil {
+			membership.CanRestrictMembers = a.CanRestrictMembers
+			membership.CanInviteUsers = a.CanInviteUsers
+		}
+		matchUpdate.MyChatMember = membership
+	}
+
+	if r := update.ChatJoinRequest; r != nil {
+		matchUpdate.JoinRequest = &guard.JoinRequest{
+			Chat: guard.ChannelInfo{ID: r.Chat.ID, Title: r.Chat.Title, Type: string(r.Chat.Type)},
+			User: castUser(r.From),
+			At:   int64(r.Date),
+			Bio:  r.Bio,
+		}
+	}
+
 	return matchUpdate
+}
+
+func castUser(u models.User) guard.User {
+	return guard.User{ID: u.ID, Username: u.Username, FirstName: u.FirstName, LastName: u.LastName}
 }
 func (d *Domain) RegisterHandler(
 	_ context.Context,

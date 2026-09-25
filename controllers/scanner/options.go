@@ -198,3 +198,27 @@ func WithWhitelistRemindBefore(before time.Duration) func(*Domain) {
 		d.whitelistRemindBefore = before
 	}
 }
+
+// WithAuditStorage keeps a per-channel action log (scans, kicks, whitelist and
+// settings changes, joins), shown in the Mini App.
+func WithAuditStorage(storage AuditStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.auditStorage = storage
+	}
+}
+
+// WithKnownChatStorage remembers chats where the bot was made an
+// administrator, so the Mini App can offer to protect them.
+func WithKnownChatStorage(storage KnownChatStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.knownChatStorage = storage
+	}
+}
+
+// WithJoinRequestStorage enables the join request manager for chats that
+// approve new members.
+func WithJoinRequestStorage(storage JoinRequestStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.joinRequestStorage = storage
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/audit"
 )
 
 func (d *Domain) AddChannelHandler(
@@ -102,11 +103,16 @@ func (d *Domain) AddChannelCallbackHandler(
 
 	d.log.Debugf("processed get ID for chat: %d", update.Message.ChatID)
 
-	protectedChannel := &ProtectedChannel{
+		protectedChannel := &ProtectedChannel{
 		ID:                update.Message.ChatShared.ChatID,
 		CommandChannelIDs: []int64{update.Message.ChatID},
 		AutoScan:          true,
 		AllowClean:        true,
+	}
+	if update.Message.ChatType == guard.ChatTypePrivate {
+		// Added from a private chat: the user administers the chat (the
+		// picker guarantees it) and manages it from the Mini App.
+		protectedChannel.Managers = []int64{update.Message.User.ID}
 	}
 	err := d.AddDefaultProtectedChannel(
 		protectedChannel,
@@ -120,6 +126,14 @@ func (d *Domain) AddChannelCallbackHandler(
 	err = d.CheckRights(ctx)
 	if err != nil {
 		d.log.Errorf("can't check rights: %v", err)
+	}
+
+	if pc, ok := d.getProtectedChannel(update.Message.ChatShared.ChatID); ok {
+		d.NoteUserName(update.Message.User.ID, strings.TrimSpace(update.Message.User.FirstName+" "+update.Message.User.LastName))
+		d.recordAudit(ctx, pc, audit.Event{
+			ActorID: update.Message.User.ID, Action: audit.ActionChannelAdded,
+			Details: map[string]any{"controlChat": update.Message.ChatID},
+		}, "")
 	}
 
 	d.log.Infof("Added protected channel: %d with admin chat: %d/%s", update.Message.ChatShared.ChatID, update.Message.ChatID, update.Message.User.Username)
