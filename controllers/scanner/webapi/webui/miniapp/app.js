@@ -17,7 +17,7 @@
       noChannels: "Пока нет каналов",
       noChannelsHint: "Отправьте боту /add и выберите канал или группу. Бот станет администратором с правом блокировать участников.",
       kindChannel: "Канал", kindGroup: "Группа",
-      tabScan: "Сканирование", tabSettings: "Настройки",
+      tabScan: "Сканирование", tabSettings: "Настройки", tabWhitelist: "Белый список",
       warnNotAdmin: "Бот не администратор. Добавьте его в администраторы, иначе сканировать нельзя.",
       warnCannotClean: "У бота нет права блокировать участников — удалять никого не получится.",
       scanIntro: "Бот получит список участников и проверит каждого. Потом вы отметите, кого удалить.",
@@ -47,6 +47,21 @@
       defaultsNote: "Сейчас действуют настройки по умолчанию. После сохранения у канала будут свои.",
       save: "Сохранить", saved: "Сохранено",
       error: "Ошибка: ",
+      whitelisted: "в белом списке",
+      whitelistedUntil: (d) => `в белом списке до ${d}`,
+      whitelistAdd: (n) => `В белый список (${n})`,
+      whitelistAddConfirm: (n, days) => `Добавить ${n} в белый список на ${days} дн.? До истечения срока их не будут проверять и удалять.`,
+      whitelistAdded: (n, d) => `Добавлено: ${n}. Действует до ${d}.`,
+      whitelistIntro: (days) => `Люди из белого списка не проверяются и не удаляются. Одобрение действует ${days} дн., потом его нужно продлить — за 3 дня бот напомнит в управляющем чате. Истёкшие записи не действуют, пока их не продлят.`,
+      whitelistEmpty: "Белый список пуст",
+      whitelistEmptyHint: "Запустите сканирование, отметьте людей и нажмите «В белый список».",
+      activeUntil: (d, left) => `до ${d} · осталось ${left} дн.`,
+      expiredOn: (d) => `истёк ${d}`,
+      approvedBy: (id) => `одобрил id ${id}`,
+      renew: "Продлить", remove: "Убрать",
+      renewConfirm: (name, days) => `Продлить одобрение для ${name} ещё на ${days} дн.?`,
+      removeConfirm: (name) => `Убрать ${name} из белого списка? Со следующего сканирования его снова будут проверять.`,
+      expiredBadge: "истёк", activeBadge: "действует",
     },
     en: {
       openInTelegram: "Open the app from Telegram: send /app to the bot.",
@@ -56,7 +71,7 @@
       noChannels: "No channels yet",
       noChannelsHint: "Send /add to the bot and pick a channel or group. The bot becomes an admin with the right to ban members.",
       kindChannel: "Channel", kindGroup: "Group",
-      tabScan: "Scan", tabSettings: "Settings",
+      tabScan: "Scan", tabSettings: "Settings", tabWhitelist: "Whitelist",
       warnNotAdmin: "The bot is not an administrator. Promote it, otherwise it can't scan.",
       warnCannotClean: "The bot can't ban members, so removing will fail.",
       scanIntro: "The bot fetches the member list and checks everyone. Then you tick who to remove.",
@@ -86,6 +101,21 @@
       defaultsNote: "The defaults apply now. Saving gives the channel its own settings.",
       save: "Save", saved: "Saved",
       error: "Error: ",
+      whitelisted: "whitelisted",
+      whitelistedUntil: (d) => `whitelisted until ${d}`,
+      whitelistAdd: (n) => `Add to whitelist (${n})`,
+      whitelistAddConfirm: (n, days) => `Whitelist ${n} for ${days} days? Until then they won't be checked or removed.`,
+      whitelistAdded: (n, d) => `Added: ${n}. Valid until ${d}.`,
+      whitelistIntro: (days) => `Whitelisted people are not checked or removed. An approval lasts ${days} days and must then be renewed; the bot reminds the control chat 3 days ahead. Expired entries have no effect until renewed.`,
+      whitelistEmpty: "The whitelist is empty",
+      whitelistEmptyHint: "Run a scan, tick people and press “Add to whitelist”.",
+      activeUntil: (d, left) => `until ${d} · ${left} days left`,
+      expiredOn: (d) => `expired ${d}`,
+      approvedBy: (id) => `approved by id ${id}`,
+      renew: "Renew", remove: "Remove",
+      renewConfirm: (name, days) => `Renew the approval for ${name} for another ${days} days?`,
+      removeConfirm: (name) => `Remove ${name} from the whitelist? They will be checked again from the next scan.`,
+      expiredBadge: "expired", activeBadge: "active",
     },
   };
   const lang = ((tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.language_code) || navigator.language || "en").slice(0, 2);
@@ -179,6 +209,14 @@
     return node;
   }
 
+  function formatDate(iso) {
+    return new Date(iso).toLocaleDateString(document.documentElement.lang, { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+
+  function userName(u) {
+    return [u.firstName, u.lastName].filter(Boolean).join(" ") || String(u.id || u.userId);
+  }
+
   function isChannel(ch) {
     return ch.chatType === "channel";
   }
@@ -233,7 +271,8 @@
     else if (!channel.botCanClean) warnings.append(el("li", { textContent: T.warnCannotClean }));
 
     const root = view.querySelector(".screen");
-    const tabs = [...view.querySelectorAll("[role=tab]")];
+    view.querySelector("[data-tab=whitelist]").hidden = !channel.whitelistEnabled;
+    const tabs = [...view.querySelectorAll("[role=tab]")].filter((t) => !t.hidden);
     const selectTab = (name) => {
       stopPolling();
       setMainButton(null);
@@ -245,6 +284,9 @@
       for (const p of root.querySelectorAll("[role=tabpanel]")) p.hidden = p.dataset.panel !== name;
       const panel = root.querySelector(`[data-panel="${name}"]`);
       if (name === "scan") renderScanIdle(panel, channel);
+      else if (name === "whitelist") renderWhitelist(panel, channel).catch((err) => {
+        panel.replaceChildren(el("p", { className: "notice warn", textContent: T.error + err.message }));
+      });
       else renderSettings(panel, channel);
     };
     tabs.forEach((t, i) => {
@@ -363,9 +405,12 @@
       renderList();
     });
 
-    const selectable = (u) => canKick && !u.protected && u.status !== "kicked";
-    $(view, "select-bad").hidden = !canKick;
-    $(view, "select-none").hidden = !canKick;
+    const canWhitelist = Boolean(channel.whitelistEnabled);
+    const selectable = (u) => (canKick || canWhitelist) && !u.protected && u.status !== "kicked";
+    $(view, "select-bad").hidden = !canKick && !canWhitelist;
+    $(view, "select-none").hidden = !canKick && !canWhitelist;
+    const whitelistButton = $(view, "whitelist-add");
+    whitelistButton.addEventListener("click", () => addToWhitelist());
     $(view, "select-bad").addEventListener("click", () => {
       users.filter((u) => u.status === "bad" && selectable(u)).forEach((u) => selected.add(u.id));
       renderList();
@@ -378,10 +423,6 @@
 
     const list = $(view, "users");
     const nothing = $(view, "nothing");
-
-    function userName(u) {
-      return [u.firstName, u.lastName].filter(Boolean).join(" ") || String(u.id);
-    }
 
     function renderList() {
       const visible = users.filter((u) =>
@@ -397,7 +438,8 @@
         });
         const sub = [];
         if (u.username) sub.push("@" + u.username);
-        if (u.protected) sub.push(u.note === "administrator" ? T.protectedAdmin : T.protectedBot);
+        if (u.whitelistedUntil) sub.push(T.whitelistedUntil(formatDate(u.whitelistedUntil)));
+        else if (u.protected) sub.push(u.note === "administrator" ? T.protectedAdmin : T.protectedBot);
         const label = el("label", {}, [
           box,
           el("span", { className: "user-name", textContent: userName(u) }, [
@@ -412,11 +454,35 @@
     }
 
     function updateMainButton() {
+      whitelistButton.hidden = !canWhitelist || selected.size === 0;
+      whitelistButton.textContent = T.whitelistAdd(selected.size);
       if (!canKick || selected.size === 0) {
         setMainButton(null);
         return;
       }
       setMainButton(T.kickButton(selected.size), kick, { destructive: true });
+    }
+
+    async function addToWhitelist() {
+      const ids = [...selected];
+      if (!(await confirmMsg(T.whitelistAddConfirm(ids.length, channel.whitelistTtlDays)))) return;
+      whitelistButton.disabled = true;
+      try {
+        const added = await api(`channels/${channel.id}/whitelist`, {
+          method: "POST",
+          body: { scanId: scan.id, userIds: ids },
+        });
+        haptic("success");
+        const until = added.length ? formatDate(added[added.length - 1].expiresAt) : "";
+        await alertMsg(T.whitelistAdded(ids.length, until));
+      } catch (err) {
+        haptic("error");
+        await alertMsg(T.error + err.message);
+      } finally {
+        whitelistButton.disabled = false;
+      }
+      // Reload the scan: whitelisted users are now marked and locked.
+      pollScan(panel, channel, scan.id);
     }
 
     async function kick() {
@@ -450,6 +516,58 @@
 
     panel.replaceChildren(view);
     renderList();
+  }
+
+  // ---------- whitelist ----------
+
+  async function renderWhitelist(panel, channel) {
+    const entries = await api(`channels/${channel.id}/whitelist`);
+    const view = fromTemplate("tpl-whitelist");
+    $(view, "intro").textContent = T.whitelistIntro(channel.whitelistTtlDays);
+    $(view, "empty").hidden = entries.length > 0;
+    const list = $(view, "entries");
+    const now = Date.now();
+
+    for (const e of entries) {
+      const name = userName(e) + (e.username ? ` (@${e.username})` : "");
+      const left = Math.max(0, Math.ceil((new Date(e.expiresAt) - now) / 86400000));
+      const when = e.active ? T.activeUntil(formatDate(e.expiresAt), left) : T.expiredOn(formatDate(e.expiresAt));
+
+      const renew = el("button", { className: "link", type: "button", textContent: T.renew });
+      renew.addEventListener("click", async () => {
+        if (!(await confirmMsg(T.renewConfirm(name, channel.whitelistTtlDays)))) return;
+        try {
+          await api(`channels/${channel.id}/whitelist/${e.userId}/renew`, { method: "POST" });
+          haptic("success");
+        } catch (err) {
+          haptic("error");
+          await alertMsg(T.error + err.message);
+        }
+        renderWhitelist(panel, channel).catch(showError);
+      });
+      const remove = el("button", { className: "link danger", type: "button", textContent: T.remove });
+      remove.addEventListener("click", async () => {
+        if (!(await confirmMsg(T.removeConfirm(name)))) return;
+        try {
+          await api(`channels/${channel.id}/whitelist/${e.userId}`, { method: "DELETE" });
+          haptic("success");
+        } catch (err) {
+          haptic("error");
+          await alertMsg(T.error + err.message);
+        }
+        renderWhitelist(panel, channel).catch(showError);
+      });
+
+      list.append(el("li", { className: e.active ? "" : "expired" }, [
+        el("span", {}, [
+          el("span", { className: "item-title", textContent: name }),
+          el("span", { className: "user-sub", textContent: `${when} · ${T.approvedBy(e.approvedBy)}` }),
+        ]),
+        el("span", { className: `badge ${e.active ? "whitelisted" : "bad"}`, textContent: e.active ? T.activeBadge : T.expiredBadge }),
+        el("span", { className: "entry-actions" }, [renew, remove]),
+      ]));
+    }
+    panel.replaceChildren(view);
   }
 
   // ---------- settings ----------

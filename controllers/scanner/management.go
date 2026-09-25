@@ -30,6 +30,10 @@ type ChannelView struct {
 	CleanUnknown  bool `json:"cleanUnknown"`
 	// CustomCleanOptions is true when the channel overrides the defaults.
 	CustomCleanOptions bool `json:"customCleanOptions"`
+	// WhitelistEnabled tells the Mini App whether to offer the whitelist.
+	WhitelistEnabled bool `json:"whitelistEnabled"`
+	// WhitelistTTLDays is how long an approval lasts.
+	WhitelistTTLDays int `json:"whitelistTtlDays,omitempty"`
 }
 
 // CanScan reports whether the bot can scan this channel (is a member).

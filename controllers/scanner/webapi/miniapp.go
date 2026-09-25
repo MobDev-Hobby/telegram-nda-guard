@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,8 +179,83 @@ func (s *Server) handleMiniAppChannel(w http.ResponseWriter, r *http.Request) {
 		s.log.Infof("webapi: user %d kicked from %d: %+v", callerID, channelID, results)
 		writeJSON(w, http.StatusOK, map[string]any{"results": results})
 
+	case sub == "whitelist" || strings.HasPrefix(sub, "whitelist/"):
+		s.handleMiniAppWhitelist(w, r, channelID, callerID, strings.TrimPrefix(strings.TrimPrefix(sub, "whitelist"), "/"))
+
 	default:
 		writeError(w, http.StatusNotFound, "unknown operation")
+	}
+}
+
+// handleMiniAppWhitelist routes /api/miniapp/channels/{id}/whitelist[/...]:
+//
+//	GET    whitelist                 entries, expired included
+//	POST   whitelist                 approve users from a scan {scanId, userIds}
+//	POST   whitelist/{userId}/renew  re-approve for another period
+//	DELETE whitelist/{userId}        remove
+func (s *Server) handleMiniAppWhitelist(w http.ResponseWriter, r *http.Request, channelID, callerID int64, rest string) {
+	ctx := r.Context()
+	switch {
+	case rest == "" && r.Method == http.MethodGet:
+		entries, err := s.miniApp.ListWhitelist(ctx, channelID)
+		if err != nil {
+			writeWhitelistError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, entries)
+
+	case rest == "" && r.Method == http.MethodPost:
+		var body struct {
+			ScanID  string  `json:"scanId"`
+			UserIDs []int64 `json:"userIds"`
+		}
+		if err := decodeJSON(r, &body); err != nil || body.ScanID == "" || len(body.UserIDs) == 0 {
+			writeError(w, http.StatusBadRequest, "scanId and userIds are required")
+			return
+		}
+		added, err := s.miniApp.AddToWhitelist(ctx, channelID, body.ScanID, body.UserIDs, callerID)
+		if err != nil {
+			writeWhitelistError(w, err)
+			return
+		}
+		s.log.Infof("webapi: user %d whitelisted %v in %d", callerID, body.UserIDs, channelID)
+		writeJSON(w, http.StatusOK, added)
+
+	default:
+		userIDStr, action, _ := strings.Cut(rest, "/")
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid user id")
+			return
+		}
+		switch {
+		case action == "renew" && r.Method == http.MethodPost:
+			entry, err := s.miniApp.RenewWhitelistEntry(ctx, channelID, userID, callerID)
+			if err != nil {
+				writeWhitelistError(w, err)
+				return
+			}
+			s.log.Infof("webapi: user %d re-approved %d in %d", callerID, userID, channelID)
+			writeJSON(w, http.StatusOK, entry)
+		case action == "" && r.Method == http.MethodDelete:
+			if err := s.miniApp.RemoveWhitelistEntry(ctx, channelID, userID, callerID); err != nil {
+				writeWhitelistError(w, err)
+				return
+			}
+			s.log.Infof("webapi: user %d removed %d from whitelist of %d", callerID, userID, channelID)
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		default:
+			writeError(w, http.StatusNotFound, "unknown operation")
+		}
+	}
+}
+
+func writeWhitelistError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, scanner.ErrWhitelistDisabled), errors.Is(err, scanner.ErrNotWhitelisted), errors.Is(err, scanner.ErrScanNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+	default:
+		writeError(w, http.StatusBadRequest, err.Error())
 	}
 }
 

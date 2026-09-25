@@ -170,3 +170,31 @@ func WithMiniApp(url, shortName string) func(*Domain) {
 		d.miniAppShortName = shortName
 	}
 }
+
+// WithWhitelistStorage enables per-channel whitelists: channel administrators
+// approve users from the Mini App, approved users skip the access check until
+// the approval expires (WithWhitelistTTL, 30 days by default) and must then be
+// re-approved.
+func WithWhitelistStorage(storage WhitelistStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.whitelistStorage = storage
+	}
+}
+
+// WithWhitelistTTL sets how long a whitelist approval lasts.
+func WithWhitelistTTL(ttl time.Duration) func(*Domain) {
+	if ttl <= 0 {
+		panic("whitelist ttl must be positive")
+	}
+	return func(d *Domain) {
+		d.whitelistTTL = ttl
+	}
+}
+
+// WithWhitelistRemindBefore sets how early control chats are reminded that an
+// approval is running out.
+func WithWhitelistRemindBefore(before time.Duration) func(*Domain) {
+	return func(d *Domain) {
+		d.whitelistRemindBefore = before
+	}
+}

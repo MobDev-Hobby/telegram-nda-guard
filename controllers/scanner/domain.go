@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/whitelist"
 )
 
 type Domain struct {
@@ -58,6 +59,14 @@ type Domain struct {
 	scansMutex          sync.Mutex
 	scans               map[string]*scanJob
 
+	whitelistStorage      WhitelistStorage
+	whitelistTTL          time.Duration
+	whitelistRemindBefore time.Duration
+	whitelistMutex        sync.Mutex
+	whitelists            map[int64]map[int64]whitelist.Entry
+	// now is replaceable in tests.
+	now func() time.Time
+
 	// ready is closed once Run() finishes initialization, so HTTP/management
 	// surfaces can wait for (or poll) readiness before serving traffic.
 	ready      chan struct{}
@@ -103,6 +112,11 @@ func New(
 		processRequestChan: make(chan ScanRequest, 10),
 		ready:              make(chan struct{}),
 		scans:              make(map[string]*scanJob),
+
+		whitelistTTL:          DefaultWhitelistTTL,
+		whitelistRemindBefore: DefaultWhitelistRemindBefore,
+		whitelists:            make(map[int64]map[int64]whitelist.Entry),
+		now:                   time.Now,
 	}
 
 	for _, opt := range opts {

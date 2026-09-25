@@ -140,7 +140,7 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		report.ReportChannels = protectedChannel.CommandChannelIDs
 	}
 
-	checker := request.accessChecker
+	checker := d.withWhitelist(request.channelInfo.id, request.accessChecker)
 	if checker == nil {
 		d.log.Infof("No access checker specified, skip")
 		return

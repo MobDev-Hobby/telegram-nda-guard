@@ -25,6 +25,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Several controls use `all: unset`, which would otherwise override the
+   UA's display:none for [hidden]. */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -62,8 +65,8 @@ h1 { font-size: 20px; margin: 4px 0 6px; overflow-wrap: anywhere; }
 .notice { margin: 0; padding: 10px 12px; border-radius: var(--radius); background: var(--section); font-size: 14px; }
 .notice.warn, .warnings li { background: color-mix(in srgb, #e6a100 15%, var(--section)); padding: 10px 12px; border-radius: var(--radius); font-size: 14px; }
 
-.tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--section); border-radius: var(--radius); padding: 3px; margin: 12px 0; }
-.tabs button { all: unset; text-align: center; padding: 8px; border-radius: 10px; cursor: pointer; }
+.tabs { display: grid; grid-auto-columns: 1fr; grid-auto-flow: column; background: var(--section); border-radius: var(--radius); padding: 3px; margin: 12px 0; }
+.tabs button { all: unset; text-align: center; padding: 8px 4px; border-radius: 10px; cursor: pointer; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
 .tabs button:focus-visible { outline: 2px solid var(--accent); }
 
@@ -132,3 +135,14 @@ input[role="switch"]:disabled { opacity: .5; }
 @media (prefers-reduced-motion: reduce) {
   input[role="switch"], input[role="switch"]::after { transition: none; }
 }
+
+button.secondary {
+  appearance: none; border: 1px solid var(--accent); border-radius: var(--radius); padding: 11px;
+  background: transparent; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer;
+}
+button.secondary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.link.danger { color: var(--danger); }
+.badge.whitelisted { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.entries li { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px 14px; align-items: center; }
+.entries .entry-actions { display: flex; gap: 14px; grid-column: 1 / -1; }
+.entries li.expired .item-title { color: var(--hint); }

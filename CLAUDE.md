@@ -34,6 +34,7 @@ processors/          scan/clean result handlers
   multiplexor/       fan-out over multiple processors
 storage/             persistence ports + adapters
   channels/          protected-channel config (defs + redis)
+  whitelist/         per-channel whitelist with expiring approvals (defs + redis)
   session/           Telegram session blob (file + redis, AES-GCM)
   drivers/go-redis/  go-redis → internal RedisClient adapter
 telegram/            Telegram transport
@@ -100,6 +101,7 @@ to `.env` (gitignored). Highlights:
 - **Channels vs groups:** Telegram's `request_chat` picker lists either broadcast channels (`chat_is_channel: true`) or groups, never both, so `/add` offers two buttons. go-telegram/bot always serialises `chat_is_channel`; leaving it false hides every channel.
 - **Member lists:** `channels.getParticipants` may return only part of a large broadcast channel. The userbot records `Count` vs fetched (`guard.ScanStats`); reports and the Mini App must show a partial list as partial.
 - **Callbacks:** authorize inline-button presses by `CallbackQuery.From`. `CallbackQuery.Message.User` is the bot, which is an admin everywhere.
+- **Whitelist:** `scanner.WithWhitelistStorage` enables per-channel whitelists. An active entry makes the user pass every check path (auto scan/clean, `/users`, Mini App) via `whitelistChecker`, which wraps the channel's checker. Approvals expire after `WithWhitelistTTL` (30 days); expired entries stay listed but have no effect until re-approved. `RunWhitelistReminders` warns control chats `WithWhitelistRemindBefore` (3 days) ahead and once on expiry.
 - **Mini App:** `webapi.WithMiniApp` validates `initData` (HMAC key `"WebAppData"`), then authorizes per channel (`AuthorizeChannel`: owner/allowlist or channel admin). Kicks only target users from a finished scan of the same channel, never admins or the bot.
 
 ## Security notes

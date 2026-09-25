@@ -57,6 +57,10 @@ func (d *Domain) fillCleanOptions(v *ChannelView, pc ProtectedChannel) {
 	v.KeepBanned = opts.KeepBanned
 	v.CleanMessages = opts.CleanMessages
 	v.CleanUnknown = opts.CleanUnknown
+	v.WhitelistEnabled = d.whitelistStorage != nil
+	if v.WhitelistEnabled {
+		v.WhitelistTTLDays = int(d.whitelistTTL / (24 * time.Hour))
+	}
 }
 
 // ListChannels implements ManagementService.
@@ -215,6 +219,7 @@ func (d *Domain) ListChannelUsers(ctx context.Context, channelID int64) (UsersVi
 	if checker == nil {
 		return UsersView{}, fmt.Errorf("no access checker configured")
 	}
+	checker = d.withWhitelist(channelID, checker)
 
 	view := UsersView{
 		ChannelID: channelID,

@@ -35,9 +35,11 @@
       <div class="tabs" role="tablist">
         <button role="tab" id="tab-scan" aria-controls="panel-scan" data-tab="scan" data-i18n="tabScan"></button>
         <button role="tab" id="tab-settings" aria-controls="panel-settings" data-tab="settings" data-i18n="tabSettings"></button>
+        <button role="tab" id="tab-whitelist" aria-controls="panel-whitelist" data-tab="whitelist" data-i18n="tabWhitelist" hidden></button>
       </div>
       <div role="tabpanel" id="panel-scan" aria-labelledby="tab-scan" data-panel="scan"></div>
       <div role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" data-panel="settings" hidden></div>
+      <div role="tabpanel" id="panel-whitelist" aria-labelledby="tab-whitelist" data-panel="whitelist" hidden></div>
     </section>
   </template>
 
@@ -66,8 +68,20 @@
         <button class="link" data-role="select-none" data-i18n="selectNone"></button>
         <button class="link" data-role="rescan" data-i18n="rescan"></button>
       </div>
+      <button class="secondary" data-role="whitelist-add" hidden></button>
       <ul class="list users" data-role="users"></ul>
       <p class="muted center" data-role="nothing" hidden data-i18n="nothingFound"></p>
+    </div>
+  </template>
+
+  <template id="tpl-whitelist">
+    <div class="stack">
+      <p class="muted" data-role="intro"></p>
+      <ul class="list entries" data-role="entries"></ul>
+      <div class="empty" data-role="empty" hidden>
+        <p data-i18n="whitelistEmpty"></p>
+        <p class="muted" data-i18n="whitelistEmptyHint"></p>
+      </div>
     </div>
   </template>
 

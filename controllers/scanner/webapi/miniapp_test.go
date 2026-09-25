@@ -20,6 +20,7 @@ import (
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/whitelist"
 )
 
 const testBotToken = "1234567890:TESTbottoken_for_verification"
@@ -79,9 +80,10 @@ func TestVerifyWebAppInitData(t *testing.T) {
 }
 
 type fakeMiniApp struct {
-	channels map[int64]scanner.ChannelView
-	settings map[int64]scanner.ChannelSettings
-	kicked   []int64
+	channels  map[int64]scanner.ChannelView
+	settings  map[int64]scanner.ChannelSettings
+	kicked    []int64
+	whitelist []scanner.WhitelistEntryView
 }
 
 func (f *fakeMiniApp) ListChannels(context.Context, int64) ([]scanner.ChannelView, error) {
@@ -111,6 +113,34 @@ func (f *fakeMiniApp) GetChannelScan(_ context.Context, id int64, scanID string)
 func (f *fakeMiniApp) KickScannedUsers(_ context.Context, _ int64, _ string, ids []int64, _ int64) ([]processors.KickResult, error) {
 	f.kicked = append(f.kicked, ids...)
 	return []processors.KickResult{{UserID: ids[0], OK: true}}, nil
+}
+
+func (f *fakeMiniApp) ListWhitelist(_ context.Context, id int64) ([]scanner.WhitelistEntryView, error) {
+	return f.whitelist, nil
+}
+func (f *fakeMiniApp) AddToWhitelist(_ context.Context, _ int64, _ string, ids []int64, callerID int64) ([]scanner.WhitelistEntryView, error) {
+	for _, id := range ids {
+		f.whitelist = append(f.whitelist, scanner.WhitelistEntryView{Entry: whitelist.Entry{UserID: id, ApprovedBy: callerID}, Active: true})
+	}
+	return f.whitelist, nil
+}
+func (f *fakeMiniApp) RenewWhitelistEntry(_ context.Context, _, userID, callerID int64) (scanner.WhitelistEntryView, error) {
+	for i := range f.whitelist {
+		if f.whitelist[i].UserID == userID {
+			f.whitelist[i].ApprovedBy = callerID
+			return f.whitelist[i], nil
+		}
+	}
+	return scanner.WhitelistEntryView{}, scanner.ErrNotWhitelisted
+}
+func (f *fakeMiniApp) RemoveWhitelistEntry(_ context.Context, _, userID, _ int64) error {
+	for i := range f.whitelist {
+		if f.whitelist[i].UserID == userID {
+			f.whitelist = append(f.whitelist[:i], f.whitelist[i+1:]...)
+			return nil
+		}
+	}
+	return scanner.ErrNotWhitelisted
 }
 
 // fakeChannelAuth: user 42 is privileged, user 5 administers channel -100.
@@ -195,12 +225,17 @@ func TestMiniAppForbidsForeignChannel(t *testing.T) {
 		{http.MethodPut, "/api/miniapp/channels/-200/settings", `{"autoScan":true}`},
 		{http.MethodPost, "/api/miniapp/channels/-200/scans", ""},
 		{http.MethodPost, "/api/miniapp/channels/-200/kick", `{"scanId":"s1","userIds":[1]}`},
+		{http.MethodGet, "/api/miniapp/channels/-200/whitelist", ""},
+		{http.MethodPost, "/api/miniapp/channels/-200/whitelist", `{"scanId":"s1","userIds":[1]}`},
+		{http.MethodPost, "/api/miniapp/channels/-200/whitelist/1/renew", ""},
+		{http.MethodDelete, "/api/miniapp/channels/-200/whitelist/1", ""},
 	} {
 		rec := miniAppRequest(s, 5, c.method, c.path, c.body)
 		assert.Equal(t, http.StatusForbidden, rec.Code, c.path)
 	}
 	assert.Empty(t, app.kicked)
 	assert.Empty(t, app.settings)
+	assert.Empty(t, app.whitelist)
 }
 
 func TestMiniAppRequiresSession(t *testing.T) {
@@ -252,4 +287,31 @@ func TestMiniAppDisabledByDefault(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/miniapp/auth", nil))
 	assert.NotEqual(t, http.StatusOK, rec.Code)
+}
+
+func TestMiniAppWhitelistFlow(t *testing.T) {
+	s, app := newMiniAppServer(t)
+
+	rec := miniAppRequest(s, 5, http.MethodPost, "/api/miniapp/channels/-100/whitelist", `{"scanId":"s1","userIds":[11]}`)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, app.whitelist, 1)
+	assert.Equal(t, int64(5), app.whitelist[0].ApprovedBy, "approver is the caller, not a body field")
+
+	rec = miniAppRequest(s, 5, http.MethodGet, "/api/miniapp/channels/-100/whitelist", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"userId":11`)
+	assert.Contains(t, rec.Body.String(), `"active":true`)
+
+	rec = miniAppRequest(s, 42, http.MethodPost, "/api/miniapp/channels/-100/whitelist/11/renew", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, int64(42), app.whitelist[0].ApprovedBy)
+
+	rec = miniAppRequest(s, 5, http.MethodPost, "/api/miniapp/channels/-100/whitelist/99/renew", "")
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+	rec = miniAppRequest(s, 5, http.MethodPost, "/api/miniapp/channels/-100/whitelist/abc/renew", "")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	rec = miniAppRequest(s, 5, http.MethodDelete, "/api/miniapp/channels/-100/whitelist/11", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, app.whitelist)
 }

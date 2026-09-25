@@ -83,7 +83,12 @@ type ScannedUser struct {
 	// Protected users (channel admins, the bot itself) can't be kicked.
 	Protected bool   `json:"protected,omitempty"`
 	Note      string `json:"note,omitempty"`
+	// WhitelistedUntil is set for users with an active whitelist approval.
+	WhitelistedUntil *time.Time `json:"whitelistedUntil,omitempty"`
 }
+
+// noteWhitelisted marks users protected by an active whitelist approval.
+const noteWhitelisted = "whitelisted"
 
 // ScanView is the state of a scan started from the Mini App.
 type ScanView struct {
@@ -120,6 +125,15 @@ type MiniAppService interface {
 	// KickScannedUsers removes the selected users. Only users returned by the
 	// given scan can be kicked, never protected ones.
 	KickScannedUsers(ctx context.Context, channelID int64, scanID string, userIDs []int64, callerID int64) ([]processors.KickResult, error)
+
+	// ListWhitelist returns the channel's whitelist, expired entries included.
+	ListWhitelist(ctx context.Context, channelID int64) ([]WhitelistEntryView, error)
+	// AddToWhitelist approves users from a scan of the channel for the
+	// whitelist period.
+	AddToWhitelist(ctx context.Context, channelID int64, scanID string, userIDs []int64, callerID int64) ([]WhitelistEntryView, error)
+	// RenewWhitelistEntry re-approves a user for another period.
+	RenewWhitelistEntry(ctx context.Context, channelID, userID, callerID int64) (WhitelistEntryView, error)
+	RemoveWhitelistEntry(ctx context.Context, channelID, userID, callerID int64) error
 }
 
 var _ MiniAppService = (*Domain)(nil)
@@ -189,7 +203,7 @@ func (d *Domain) StartChannelScan(_ context.Context, channelID, callerID int64) 
 	d.scansMutex.Unlock()
 
 	// The scan outlives the HTTP request that started it.
-	go d.runScanJob(job, checker)
+	go d.runScanJob(job, d.withWhitelist(channelID, checker))
 	return view, nil
 }
 
@@ -253,14 +267,25 @@ func (d *Domain) runScanJob(job *scanJob, checker CheckUserAccess) {
 			status = UserStatusBad
 		}
 		note, isProtected := protected[user.ID]
+		var whitelistedUntil *time.Time
+		if entry, ok := d.activeWhitelistEntry(ctx, channelID, user.ID); ok {
+			until := entry.ExpiresAt
+			whitelistedUntil = &until
+			if !isProtected {
+				// Whitelisted users can't be ticked for removal; to remove
+				// one, take them off the whitelist first.
+				isProtected, note = true, noteWhitelisted
+			}
+		}
 		scanned = append(scanned, ScannedUser{
-			ID:        user.ID,
-			FirstName: user.FirstName,
-			LastName:  user.LastName,
-			Username:  user.Username,
-			Status:    status,
-			Protected: isProtected,
-			Note:      note,
+			ID:               user.ID,
+			FirstName:        user.FirstName,
+			LastName:         user.LastName,
+			Username:         user.Username,
+			Status:           status,
+			Protected:        isProtected,
+			Note:             note,
+			WhitelistedUntil: whitelistedUntil,
 		})
 		byID[user.ID] = user
 

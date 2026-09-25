@@ -51,6 +51,19 @@ Both batches below ship together in the next tag (0.4.0).
   `scanner.WithDefaultCleanOptions`, `scanner.WithMiniApp`, the `/app` command
   and a Mini App menu button. `webapi.Server.Handler()` exposes the handler
   for mounting into an existing server.
+- **Per-channel whitelist with periodic re-approval.** `scanner.WithWhitelistStorage`
+  (+ `storage/whitelist` model and `storage/whitelist/redis`). Channel admins
+  add users from a Mini App scan; an active entry makes the user pass every
+  access check in that channel and protects them from Mini App kicks. An
+  approval lasts `WithWhitelistTTL` (default 30 days) and then stops working
+  until an admin re-approves it; expired entries stay listed. Control chats get
+  a reminder `WithWhitelistRemindBefore` (default 3 days) ahead, a notice on
+  expiry, and an audit message on every add/renew/remove. Mini App: a
+  "Whitelist" tab and "Add to whitelist" in scan results; API
+  `GET|POST /api/miniapp/channels/{id}/whitelist`,
+  `POST …/whitelist/{userId}/renew`, `DELETE …/whitelist/{userId}`.
+  `scanner.MiniAppService` gained `ListWhitelist`, `AddToWhitelist`,
+  `RenewWhitelistEntry`, `RemoveWhitelistEntry`.
 - **Per-channel cleanup settings.** `processors.CleanOptions` (`KeepBanned`,
   `CleanMessages`, `CleanUnknown`) on `scanner.ProtectedChannel`,
   `channels.ProtectedChannel` (persisted, omitted when unset) and
@@ -82,6 +95,8 @@ Both batches below ship together in the next tag (0.4.0).
 
 #### Fixed
 
+- Mini App: controls styled with `all: unset` ignored the `hidden`
+  attribute.
 - The kicker skipped the ban when both `KeepBanned` and `CleanMessages` were
   off and only issued an `OnlyIfBanned` unban — a no-op — while counting the
   user as kicked. It now always bans first.

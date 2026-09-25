@@ -25,6 +25,7 @@ import (
 	goredisadapter "github.com/MobDev-Hobby/telegram-nda-guard/storage/drivers/go-redis"
 	filestorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/file"
 	redisstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis"
+	rediswhitelist "github.com/MobDev-Hobby/telegram-nda-guard/storage/whitelist/redis"
 	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/bots/bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/sender/ratelimited"
 	cacheduserbot "github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots/cached"
@@ -251,7 +252,13 @@ func main() {
 		if err != nil {
 			logger.Panicf("can't init storage: %s", err)
 		}
-		controllerOptions = append(controllerOptions, scanner.WithStorage(storage))
+		controllerOptions = append(
+			controllerOptions,
+			scanner.WithStorage(storage),
+			// Per-channel whitelists, managed from the Mini App; approvals
+			// expire after 30 days unless re-approved.
+			scanner.WithWhitelistStorage(rediswhitelist.New(redisClient)),
+		)
 	}
 
 	ProtectorControllerDomain := scanner.New(

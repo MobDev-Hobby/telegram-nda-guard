@@ -64,6 +64,7 @@ func (d *Domain) Run(
 
 	d.log.Debugf("Setup user checker loop")
 	d.RunUserAccessChecker(ctx)
+	d.RunWhitelistReminders(ctx)
 
 	d.log.Infof("Initialization completed, now bot is ready to go")
 	d.notifySuccessRun(ctx)
