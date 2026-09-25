@@ -108,11 +108,15 @@ func (d *Domain) ClearHandler(id string) {
 }
 
 func (d *Domain) CallbackResponse(ctx context.Context, response guard.CallbackResponse) {
-	d.botClient.AnswerCallbackQuery(
+	// An unanswered callback only leaves a spinner on the button; log and go on.
+	_, err := d.botClient.AnswerCallbackQuery(
 		ctx,
 		&bot.AnswerCallbackQueryParams{
 			CallbackQueryID: response.ID,
 			Text:            response.Text,
 			ShowAlert:       response.ShowAlert,
 		})
+	if err != nil {
+		d.log.Warnf("can't answer callback query: %s", err)
+	}
 }

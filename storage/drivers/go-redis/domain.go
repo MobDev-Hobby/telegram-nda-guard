@@ -49,7 +49,7 @@ func (d *Domain) GetAllHashValues(ctx context.Context, hash string) (map[string]
 }
 
 func (d *Domain) ListPush(ctx context.Context, key string, value []byte, maxLen int64) error {
-	pipe := d.Client.TxPipeline()
+		pipe := d.TxPipeline()
 	pipe.LPush(ctx, key, value)
 	pipe.LTrim(ctx, key, 0, maxLen-1)
 	_, err := pipe.Exec(ctx)
@@ -57,7 +57,7 @@ func (d *Domain) ListPush(ctx context.Context, key string, value []byte, maxLen 
 }
 
 func (d *Domain) ListRange(ctx context.Context, key string, limit int64) ([][]byte, error) {
-	items, err := d.Client.LRange(ctx, key, 0, limit-1).Result()
+		items, err := d.LRange(ctx, key, 0, limit-1).Result()
 	if err != nil {
 		return nil, err
 	}

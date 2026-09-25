@@ -147,13 +147,6 @@ func (s *Server) validateSessionToken(token string) (int64, bool) {
 	return int64(binary.BigEndian.Uint64(raw[0:8])), true
 }
 
-// clearSession removes the session cookie.
-func (s *Server) clearSession(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name: s.cookieName, Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(0, 0),
-	})
-}
-
 // requireSession wraps a handler that only needs an authenticated caller; the
 // handler performs its own (e.g. per-channel) authorization.
 func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {

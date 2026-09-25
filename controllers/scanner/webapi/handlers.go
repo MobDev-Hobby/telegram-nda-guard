@@ -223,7 +223,7 @@ func (s *Server) handleRefreshRights(w http.ResponseWriter, r *http.Request) {
 
 // decodeJSON decodes a JSON request body into dst with a sane size limit.
 func decodeJSON(r *http.Request, dst any) error {
-	defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 	r.Body = http.MaxBytesReader(nil, r.Body, 1<<16) // 64 KiB
 	return json.NewDecoder(r.Body).Decode(dst)
 }

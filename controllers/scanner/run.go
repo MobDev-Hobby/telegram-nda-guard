@@ -36,7 +36,9 @@ func (d *Domain) Run(
 			protectedChannel.CleanReportProcessor = d.defaultCleanProcessor
 			protectedChannel.ScanReportProcessor = d.defaultScanProcessor
 			protectedChannel.AccessChecker = d.defaultAccessChecker
-			d.AddDefaultProtectedChannel(&protectedChannel)
+			if err := d.AddDefaultProtectedChannel(&protectedChannel); err != nil {
+				d.log.Errorf("can't restore protected channel %d: %s", protectedChannel.ID, err)
+			}
 		}
 	}
 

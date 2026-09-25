@@ -106,8 +106,8 @@ func parseSetFlagPayload(data string) (channelID int64, flag string, ok bool) {
 	if len(parts) < 3 || parts[0] != "/setflag" {
 		return 0, "", false
 	}
-	id, err := parseChannelArg(data)
-	if err != true {
+	id, ok := parseChannelArg(data)
+	if !ok {
 		return 0, "", false
 	}
 	return id, parts[2], true
