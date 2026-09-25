@@ -34,7 +34,7 @@ func New(apiKey string, opts ...TelegramBotOption) (*Domain, error) {
 
 	d.botClient, err = bot.New(
 		apiKey, []bot.Option{
-						bot.WithSkipGetMe(),
+			bot.WithSkipGetMe(),
 			// Telegram remembers the last allowed_updates list; without an
 			// explicit one, a list set by an earlier deployment would keep
 			// membership and join-request updates from arriving.

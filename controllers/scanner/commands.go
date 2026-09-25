@@ -33,7 +33,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		)
 	}
 
-		d.log.Debugf("Register membership and join request handlers")
+	d.log.Debugf("Register membership and join request handlers")
 	d.telegramBot.RegisterHandler(
 		ctx,
 		func(update *guard.Update) bool { return update.MyChatMember != nil },
@@ -67,7 +67,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		ctx,
 		func(update *guard.Update) bool {
 			if update.Message != nil &&
-								(strings.HasPrefix(update.Message.Text, "/start") ||
+				(strings.HasPrefix(update.Message.Text, "/start") ||
 					strings.HasPrefix(update.Message.Text, "/help")) &&
 				!isStartAdd(update) {
 
@@ -248,7 +248,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 				}
 				return false
 			},
-						d.requireAuthOrPrivateEmployee(d.AddChannelHandler),
+			d.requireAuthOrPrivateEmployee(d.AddChannelHandler),
 		)
 		d.telegramBot.RegisterHandler(
 			ctx,
@@ -266,7 +266,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			// Reply keyboards are visible to every member of a group, so the
 			// share itself must be authorized too, not only the /add that
 			// produced the button.
-						d.requireAuthOrPrivateEmployee(d.AddChannelCallbackHandler),
+			d.requireAuthOrPrivateEmployee(d.AddChannelCallbackHandler),
 		)
 	}
 

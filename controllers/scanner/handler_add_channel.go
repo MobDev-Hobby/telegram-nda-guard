@@ -103,7 +103,7 @@ func (d *Domain) AddChannelCallbackHandler(
 
 	d.log.Debugf("processed get ID for chat: %d", update.Message.ChatID)
 
-		protectedChannel := &ProtectedChannel{
+	protectedChannel := &ProtectedChannel{
 		ID:                update.Message.ChatShared.ChatID,
 		CommandChannelIDs: []int64{update.Message.ChatID},
 		AutoScan:          true,
