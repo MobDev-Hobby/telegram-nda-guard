@@ -24,6 +24,12 @@ type ChannelView struct {
 	BotOnChannel bool    `json:"botOnChannel"`
 	BotCanInvite bool    `json:"botCanInvite"`
 	BotCanClean  bool    `json:"botCanClean"`
+	// Effective clean options: the channel's own when set, else the defaults.
+	KeepBanned    bool `json:"keepBanned"`
+	CleanMessages bool `json:"cleanMessages"`
+	CleanUnknown  bool `json:"cleanUnknown"`
+	// CustomCleanOptions is true when the channel overrides the defaults.
+	CustomCleanOptions bool `json:"customCleanOptions"`
 }
 
 // CanScan reports whether the bot can scan this channel (is a member).

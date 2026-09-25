@@ -1,5 +1,7 @@
 package scanner
 
+import "github.com/MobDev-Hobby/telegram-nda-guard/processors"
+
 type ChannelInfo struct {
 	migratedFrom      *int64
 	id                int64
@@ -20,11 +22,14 @@ func (ci *ChannelInfo) CanClean() bool {
 }
 
 type ProtectedChannel struct {
-	ID                   int64
-	CommandChannelIDs    []int64
-	AutoScan             bool
-	AutoClean            bool
-	AllowClean           bool
+	ID                int64
+	CommandChannelIDs []int64
+	AutoScan          bool
+	AutoClean         bool
+	AllowClean        bool
+	// CleanOptions overrides the clean processor's defaults for this channel.
+	// nil means "use the defaults".
+	CleanOptions         *processors.CleanOptions
 	AccessChecker        CheckUserAccess     `json:",omitempty"`
 	ScanReportProcessor  UserReportProcessor `json:",omitempty"`
 	CleanReportProcessor UserReportProcessor `json:",omitempty"`

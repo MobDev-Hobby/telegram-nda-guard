@@ -26,10 +26,16 @@ func (d *Domain) SendMessage(ctx context.Context, message *guard.Message) error 
 	for _, buttonsLine := range message.InlineButtons {
 		buttonsRow := []models.InlineKeyboardButton{}
 		for _, button := range buttonsLine {
-			buttonsRow = append(buttonsRow, models.InlineKeyboardButton{
-				Text:         button.Text,
-				CallbackData: button.Command,
-			})
+			inlineButton := models.InlineKeyboardButton{Text: button.Text}
+			switch {
+			case button.WebAppURL != "":
+				inlineButton.WebApp = &models.WebAppInfo{URL: button.WebAppURL}
+			case button.URL != "":
+				inlineButton.URL = button.URL
+			default:
+				inlineButton.CallbackData = button.Command
+			}
+			buttonsRow = append(buttonsRow, inlineButton)
 		}
 		inlineButtons = append(inlineButtons, buttonsRow)
 	}
@@ -47,7 +53,7 @@ func (d *Domain) SendMessage(ctx context.Context, message *guard.Message) error 
 				Text: button.Text,
 			}
 			if button.RequestChannel != nil && *button.RequestChannel {
-				buttonEntity.RequestChat = d.sendAddChannelButton(ctx, button.ID)
+				buttonEntity.RequestChat = requestChatButton(button.ID, button.RequestChatIsChannel)
 			}
 			buttonsRow = append(buttonsRow, buttonEntity)
 		}
@@ -78,20 +84,27 @@ func (d *Domain) SendMessage(ctx context.Context, message *guard.Message) error 
 	return err
 }
 
-func (d *Domain) sendAddChannelButton(_ context.Context, id int32) *models.KeyboardButtonRequestChat {
-
+// requestChatButton builds a request_chat keyboard button.
+//
+// chat_is_channel has no omitempty in go-telegram/bot, so it is always sent:
+// false makes Telegram list only groups and supergroups, true only broadcast
+// channels. Before this was parameterised the bot always sent false, which is
+// why channels could never be picked.
+//
+// The requested rights are the minimum the guard needs: restrict members (to
+// kick) and invite users (to check invite rights). can_promote_members was
+// requested before; Telegram then lists only chats where the user may add
+// admins, which in practice hides everything the user does not own.
+func requestChatButton(id int32, isChannel bool) *models.KeyboardButtonRequestChat {
+	rights := &models.ChatAdministratorRights{
+		CanRestrictMembers: true,
+		CanInviteUsers:     true,
+	}
 	return &models.KeyboardButtonRequestChat{
-		RequestID: id,
-		UserAdministratorRights: &models.ChatAdministratorRights{
-			CanManageChat:      true,
-			CanInviteUsers:     true,
-			CanRestrictMembers: true,
-			CanPromoteMembers:  true,
-		},
-		BotAdministratorRights: &models.ChatAdministratorRights{
-			CanManageChat:      true,
-			CanPromoteMembers:  true,
-			CanRestrictMembers: true,
-		},
+		RequestID:               id,
+		ChatIsChannel:           isChannel,
+		UserAdministratorRights: rights,
+		BotAdministratorRights:  rights,
+		RequestTitle:            true,
 	}
 }

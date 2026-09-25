@@ -40,4 +40,10 @@ type environmentConfig struct {
 	// Web management API (optional). When WebAddr is empty, the web UI is disabled.
 	WebAddr          string `env:"WEB_ADDR"`
 	WebSessionSecret string `env:"WEB_SESSION_SECRET"`
+	// MiniAppURL is the public HTTPS address of the Mini App page served by the
+	// web API (e.g. https://guard.example.com/miniapp/). Needs WEB_ADDR.
+	MiniAppURL string `env:"MINIAPP_URL"`
+	// MiniAppShortName is the Mini App short name from BotFather; it lets /app
+	// open the app from groups.
+	MiniAppShortName string `env:"MINIAPP_SHORT_NAME"`
 }

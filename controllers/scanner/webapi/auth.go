@@ -86,18 +86,22 @@ func (s *Server) verifyTelegramLogin(values map[string]string, maxAge time.Durat
 	return uid, nil
 }
 
-// issueSession builds and sets a signed session cookie for callerID.
-func (s *Server) issueSession(w http.ResponseWriter, callerID int64) {
+// newSessionToken builds a signed session token for callerID.
+func (s *Server) newSessionToken(callerID int64) string {
 	payload := make([]byte, sessionLen)
 	binary.BigEndian.PutUint64(payload[0:8], uint64(callerID))
 	binary.BigEndian.PutUint64(payload[8:16], uint64(time.Now().Add(s.cookieTTL).Unix()))
 	mac := hmac.New(sha256.New, s.sessionSecret)
 	mac.Write(payload[0:16])
 	copy(payload[16:], mac.Sum(nil))
+	return hex.EncodeToString(payload)
+}
 
+// issueSession builds and sets a signed session cookie for callerID.
+func (s *Server) issueSession(w http.ResponseWriter, callerID int64) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     s.cookieName,
-		Value:    hex.EncodeToString(payload),
+		Value:    s.newSessionToken(callerID),
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -106,14 +110,23 @@ func (s *Server) issueSession(w http.ResponseWriter, callerID int64) {
 	})
 }
 
-// validateSession parses and verifies the session cookie, returning the caller
-// ID and whether the session is still valid.
+// validateSession verifies the session token from the Authorization header
+// ("Bearer <token>", used by the Mini App, whose webview may drop cookies) or,
+// failing that, the session cookie. It returns the caller ID and whether the
+// session is still valid.
 func (s *Server) validateSession(r *http.Request) (int64, bool) {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		return s.validateSessionToken(strings.TrimPrefix(auth, "Bearer "))
+	}
 	c, err := r.Cookie(s.cookieName)
 	if err != nil {
 		return 0, false
 	}
-	raw, err := hex.DecodeString(c.Value)
+	return s.validateSessionToken(c.Value)
+}
+
+func (s *Server) validateSessionToken(token string) (int64, bool) {
+	raw, err := hex.DecodeString(token)
 	if err != nil || len(raw) != sessionLen {
 		return 0, false
 	}
@@ -134,6 +147,19 @@ func (s *Server) clearSession(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name: s.cookieName, Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(0, 0),
 	})
+}
+
+// requireSession wraps a handler that only needs an authenticated caller; the
+// handler performs its own (e.g. per-channel) authorization.
+func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		callerID, ok := s.validateSession(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next(w, r.WithContext(context.WithValue(r.Context(), callerIDKey, callerID)))
+	}
 }
 
 // requireAuth wraps a handler: it validates the session cookie and, if present,

@@ -24,7 +24,7 @@ type fakeService struct {
 func newFakeService() *fakeService {
 	return &fakeService{
 		channels: map[int64]scanner.ChannelView{
-			123: {ID: 123, Title: "Alpha", AutoScan: true, BotOnChannel: true},
+			123: {ID: 123, Title: "Alpha", AutoScan: true, BotOnChannel: true, CommandChats: []int64{555}},
 		},
 		allowed: true,
 	}
@@ -163,6 +163,12 @@ func TestTriggerScanWithChat(t *testing.T) {
 	s, _ := newTestServer(t, 42)
 	rec := doWithSession(t, s, 42, http.MethodPost, "/api/channels/123/scan?chat=555", "")
 	assert.Equal(t, http.StatusAccepted, rec.Code)
+}
+
+func TestTriggerScanFromUnrelatedChatForbidden(t *testing.T) {
+	s, _ := newTestServer(t, 42)
+	rec := doWithSession(t, s, 42, http.MethodPost, "/api/channels/123/scan?chat=666", "")
+	assert.Equal(t, http.StatusForbidden, rec.Code)
 }
 
 func TestAddChannel(t *testing.T) {

@@ -42,9 +42,16 @@ func castUpdate(update *models.Update) *guard.Update {
 	}
 
 	if update.CallbackQuery != nil {
+		from := update.CallbackQuery.From
 		matchUpdate.CallbackQuery = &guard.CallbackQuery{
 			ID:   update.CallbackQuery.ID,
 			Data: update.CallbackQuery.Data,
+			From: guard.User{
+				ID:        from.ID,
+				Username:  from.Username,
+				FirstName: from.FirstName,
+				LastName:  from.LastName,
+			},
 		}
 
 		if update.CallbackQuery.Message.Message != nil {

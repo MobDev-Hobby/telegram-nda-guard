@@ -51,12 +51,24 @@ func ChatTypeNoun(chatType string) string {
 type InlineButton struct {
 	Text    string
 	Command string
+	// URL, when set, turns the button into a link button (Command is ignored).
+	URL string
+	// WebAppURL, when set, opens a Telegram Mini App. Telegram only allows
+	// web_app inline buttons in private chats; in groups use URL with a
+	// t.me/<bot>/<app> direct link instead.
+	WebAppURL string
 }
 
 type Button struct {
-	ID             int32
-	Text           string
+	ID   int32
+	Text string
+	// RequestChannel turns the button into a request_chat button: pressing it
+	// lets the user pick a chat and share it with the bot.
 	RequestChannel *bool
+	// RequestChatIsChannel selects which chats the request_chat picker shows:
+	// true lists broadcast channels, false lists groups and supergroups.
+	// Telegram never shows both kinds in one picker.
+	RequestChatIsChannel bool
 }
 
 type Message struct {
@@ -85,8 +97,12 @@ type Update struct {
 }
 
 type CallbackQuery struct {
-	ID      string
-	Data    string
+	ID   string
+	Data string
+	// From is the user who pressed the button. Message.User is the author of
+	// the message carrying the button, which is the bot itself, so
+	// authorization must use From.
+	From    User
 	Message *MessageReceived
 }
 
@@ -94,4 +110,18 @@ type CallbackResponse struct {
 	ID        string
 	Text      string
 	ShowAlert bool
+}
+
+// ScanStats describes how complete a member listing is. Telegram does not
+// always return every member of a broadcast channel, so Fetched can be lower
+// than Total; consumers should surface that instead of treating the list as
+// complete.
+type ScanStats struct {
+	Fetched int `json:"fetched"`
+	Total   int `json:"total"`
+}
+
+// Partial reports whether fewer members were fetched than Telegram reports.
+func (s ScanStats) Partial() bool {
+	return s.Total > s.Fetched
 }

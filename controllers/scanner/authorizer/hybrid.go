@@ -7,6 +7,8 @@ package authorizer
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
@@ -37,11 +39,20 @@ type Logger interface {
 // The allowlist and owner are checked first (cheap, no I/O); the admin check is
 // performed last because it issues a Telegram API call.
 type HybridAuthorizer struct {
-	bot           ChatAdminLister
-	ownerUserID   int64
-	allowUserIDs  []int64
-	requireAdmin  bool
-	log           Logger
+	bot          ChatAdminLister
+	ownerUserID  int64
+	allowUserIDs []int64
+	requireAdmin bool
+	log          Logger
+
+	adminCacheTTL time.Duration
+	adminCacheMu  sync.Mutex
+	adminCache    map[int64]adminCacheEntry
+}
+
+type adminCacheEntry struct {
+	admins  []int64
+	fetched time.Time
 }
 
 // Option configures a HybridAuthorizer.
@@ -77,6 +88,15 @@ func WithLogger(log Logger) Option {
 	}
 }
 
+// WithAdminCacheTTL sets how long a chat's administrator list is reused before
+// asking Telegram again (default 1 minute; 0 disables caching). A demoted
+// administrator keeps access for at most this long.
+func WithAdminCacheTTL(ttl time.Duration) Option {
+	return func(h *HybridAuthorizer) {
+		h.adminCacheTTL = ttl
+	}
+}
+
 // noopLogger discards all output.
 type noopLogger struct{}
 
@@ -87,8 +107,10 @@ func (noopLogger) Debugf(string, ...any) {}
 // configure owner, allowlist and admin enforcement.
 func New(bot ChatAdminLister, opts ...Option) *HybridAuthorizer {
 	h := &HybridAuthorizer{
-		bot: bot,
-		log: noopLogger{},
+		bot:           bot,
+		log:           noopLogger{},
+		adminCacheTTL: time.Minute,
+		adminCache:    make(map[int64]adminCacheEntry),
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -107,7 +129,12 @@ func (h *HybridAuthorizer) Authorize(ctx context.Context, update *guard.Update) 
 		return h.authorizeIDs(ctx, update.Message.User.ID, update.Message.ChatID)
 	}
 	if update.CallbackQuery != nil && update.CallbackQuery.Message != nil {
-		return h.authorizeIDs(ctx, update.CallbackQuery.Message.User.ID, update.CallbackQuery.Message.ChatID)
+		// CallbackQuery.Message.User is the author of the message that carries
+		// the button, i.e. the bot. The presser is CallbackQuery.From.
+		if update.CallbackQuery.From.ID == 0 {
+			return false, errors.New("authorize: callback without sender")
+		}
+		return h.authorizeIDs(ctx, update.CallbackQuery.From.ID, update.CallbackQuery.Message.ChatID)
 	}
 	return false, errors.New("authorize: update has no message")
 }
@@ -125,29 +152,83 @@ func (h *HybridAuthorizer) AuthenticateAndAuthorize(ctx context.Context, callerI
 // resolves whether callerID may act, optionally checking that they are an
 // administrator of scopeChatID when RequireAdmin is set and scopeChatID != 0.
 func (h *HybridAuthorizer) authorizeIDs(ctx context.Context, callerID, scopeChatID int64) (bool, error) {
-	// 1. Owner always wins.
-	if h.ownerUserID != 0 && callerID == h.ownerUserID {
+	// 1. Owner and explicit allowlist always win.
+	if h.isPrivileged(callerID) {
 		return true, nil
-	}
-	// 2. Explicit allowlist.
-	for _, id := range h.allowUserIDs {
-		if id == callerID {
-			return true, nil
-		}
 	}
 	// 3. Optional: caller is an admin of the originating/target chat. Skipped
 	//    when scopeChatID is 0 (e.g. web calls without a chat context).
 	if h.requireAdmin && scopeChatID != 0 {
-		admins, err := h.bot.GetChatAdministrators(ctx, scopeChatID)
-		if err != nil {
-			h.log.Errorf("authorize: can't get chat admins for %d: %s", scopeChatID, err)
-			return false, nil
-		}
-		for _, id := range admins {
-			if id == callerID {
-				return true, nil
-			}
-		}
+		return h.isChatAdmin(ctx, callerID, scopeChatID), nil
 	}
 	return false, nil
+}
+
+// AuthorizeChannel implements the channel-scoped check used by the Mini App:
+// the owner and the allowlist may manage every channel, anyone else only the
+// channels they administer. Unlike authorizeIDs it does not depend on
+// WithRequireAdmin: administering a channel is what entitles a user to manage
+// its protection.
+func (h *HybridAuthorizer) AuthorizeChannel(ctx context.Context, callerID, channelID int64) (bool, error) {
+	if h.isPrivileged(callerID) {
+		return true, nil
+	}
+	if channelID == 0 {
+		return false, nil
+	}
+	return h.isChatAdmin(ctx, callerID, channelID), nil
+}
+
+// IsPrivileged reports whether callerID is the owner or on the allowlist.
+func (h *HybridAuthorizer) IsPrivileged(_ context.Context, callerID int64) bool {
+	return h.isPrivileged(callerID)
+}
+
+func (h *HybridAuthorizer) isPrivileged(callerID int64) bool {
+	if h.ownerUserID != 0 && callerID == h.ownerUserID {
+		return true
+	}
+	for _, id := range h.allowUserIDs {
+		if id == callerID {
+			return true
+		}
+	}
+	return false
+}
+
+// isChatAdmin fails closed: when the admin list can't be fetched the caller is
+// not treated as an admin.
+func (h *HybridAuthorizer) isChatAdmin(ctx context.Context, callerID, chatID int64) bool {
+	admins, err := h.chatAdmins(ctx, chatID)
+	if err != nil {
+		h.log.Errorf("authorize: can't get chat admins for %d: %s", chatID, err)
+		return false
+	}
+	for _, id := range admins {
+		if id == callerID {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *HybridAuthorizer) chatAdmins(ctx context.Context, chatID int64) ([]int64, error) {
+	if h.adminCacheTTL > 0 {
+		h.adminCacheMu.Lock()
+		entry, ok := h.adminCache[chatID]
+		h.adminCacheMu.Unlock()
+		if ok && time.Since(entry.fetched) < h.adminCacheTTL {
+			return entry.admins, nil
+		}
+	}
+	admins, err := h.bot.GetChatAdministrators(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if h.adminCacheTTL > 0 {
+		h.adminCacheMu.Lock()
+		h.adminCache[chatID] = adminCacheEntry{admins: admins, fetched: time.Now()}
+		h.adminCacheMu.Unlock()
+	}
+	return admins, nil
 }

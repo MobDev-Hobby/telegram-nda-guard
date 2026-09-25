@@ -8,6 +8,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 	"github.com/MobDev-Hobby/telegram-nda-guard/storage/channels"
 )
 
@@ -64,6 +65,7 @@ func (d *Domain) AddDefaultProtectedChannel(pc *ProtectedChannel) error {
 		AutoScan:             pc.AutoScan,
 		AutoClean:            pc.AutoClean,
 		AllowClean:           pc.AllowClean,
+		CleanOptions:         pc.CleanOptions,
 		AccessChecker:        d.defaultAccessChecker,
 		ScanReportProcessor:  d.defaultScanProcessor,
 		CleanReportProcessor: d.defaultCleanProcessor,
@@ -90,13 +92,7 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 	if d.storage != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		err := d.storage.Store(ctx, &channels.ProtectedChannel{
-			ID:                channel.ID,
-			CommandChannelIDs: channel.CommandChannelIDs,
-			AutoScan:          channel.AutoScan,
-			AutoClean:         channel.AutoClean,
-			AllowClean:        channel.AllowClean,
-		})
+		err := d.storage.Store(ctx, storageRecord(*channel))
 		if err != nil {
 			return err
 		}
@@ -257,13 +253,7 @@ func (d *Domain) CleanProtectedChannel(channelID int64, commandChannelId int64) 
 		if d.storage != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			if err := d.storage.Store(ctx, &channels.ProtectedChannel{
-				ID:                protectedChannel.ID,
-				CommandChannelIDs: protectedChannel.CommandChannelIDs,
-				AutoScan:          protectedChannel.AutoScan,
-				AutoClean:         protectedChannel.AutoClean,
-				AllowClean:        protectedChannel.AllowClean,
-			}); err != nil {
+			if err := d.storage.Store(ctx, storageRecord(protectedChannel)); err != nil {
 				d.log.Errorf("can't update channel %d in storage: %s", channelID, err)
 				return err
 			}
@@ -327,4 +317,21 @@ func (d *Domain) channelHasTicker(channelID int64) bool {
 		}
 	}
 	return false
+}
+
+// storageRecord converts a protected channel into its persisted form.
+func storageRecord(pc ProtectedChannel) *channels.ProtectedChannel {
+	var cleanOptions *processors.CleanOptions
+	if pc.CleanOptions != nil {
+		opts := *pc.CleanOptions
+		cleanOptions = &opts
+	}
+	return &channels.ProtectedChannel{
+		ID:                pc.ID,
+		CommandChannelIDs: pc.CommandChannelIDs,
+		AutoScan:          pc.AutoScan,
+		AutoClean:         pc.AutoClean,
+		AllowClean:        pc.AllowClean,
+		CleanOptions:      cleanOptions,
+	}
 }

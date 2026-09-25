@@ -39,6 +39,17 @@ func (d *Domain) ProcessReport(
 		d.log.Errorf("ProcessReport write message failed: %v", err)
 	}
 
+	if report.Stats.Partial() {
+		_, err := message.WriteString(fmt.Sprintf(
+			"\n⚠️ Telegram returned only <b>%d of %d</b> members, the rest were not checked.\n",
+			report.Stats.Fetched,
+			report.Stats.Total,
+		))
+		if err != nil {
+			d.log.Errorf("ProcessReport write message failed: %v", err)
+		}
+	}
+
 	for _, reportChunk := range []struct {
 		title string
 		users []guard.User

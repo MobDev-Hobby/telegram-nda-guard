@@ -13,18 +13,16 @@ func (d *Domain) ProcessReport(
 	report processors.AccessReport,
 ) {
 
+	opts := d.effectiveOptions(report.CleanOptions)
+
 	usersToClean := report.DeniedUsers
-	cleanedUsers := 0
-	if d.cleanUnknown {
+	if opts.CleanUnknown {
 		usersToClean = append(usersToClean, report.UnknownUsers...)
 	}
 
-	for _, user := range usersToClean {
-		// Count success per-user. Previously `success` was accumulated across
-		// iterations (`success = success && ...`), so once any user failed the
-		// counter stayed false for every subsequent user, undercounting even
-		// successfully kicked users.
-		if d.cleanUser(ctx, report.Channel, user) {
+	cleanedUsers := 0
+	for _, result := range d.KickUsers(ctx, report.Channel, usersToClean, &opts) {
+		if result.OK {
 			cleanedUsers++
 		}
 	}
@@ -47,10 +45,17 @@ func (d *Domain) ProcessReport(
 		len(report.DeniedUsers),
 		cleanedUsers,
 		len(usersToClean),
-		d.keepBanned,
-		d.cleanMessages,
-		d.cleanUnknown,
+		opts.KeepBanned,
+		opts.CleanMessages,
+		opts.CleanUnknown,
 	)
+	if report.Stats.Partial() {
+		message += fmt.Sprintf(
+			"\n\n⚠️ Telegram returned only <b>%d of %d</b> members, the rest were not checked.",
+			report.Stats.Fetched,
+			report.Stats.Total,
+		)
+	}
 
 	for _, chatID := range report.ReportChannels {
 		if err := d.botClient.SendReport(ctx, chatID, message); err != nil {
@@ -60,32 +65,72 @@ func (d *Domain) ProcessReport(
 	d.log.Debugf(message)
 }
 
-// cleanUser bans then (optionally) unbans a single user. Returns true when the
-// user was removed from the channel. The bot client is expected to be
-// rate-limited and to handle Telegram FLOOD_WAIT (429) internally.
+// KickUsers removes users from channel one by one and reports the outcome for
+// each. opts overrides the kicker defaults when not nil. Unlike ProcessReport it
+// sends no report, so callers that pick users by hand (e.g. the Mini App) can
+// word their own.
+func (d *Domain) KickUsers(
+	ctx context.Context,
+	channel guard.ChannelInfo,
+	users []guard.User,
+	opts *processors.CleanOptions,
+) []processors.KickResult {
+
+	effective := d.effectiveOptions(opts)
+	results := make([]processors.KickResult, 0, len(users))
+	for _, user := range users {
+		err := d.cleanUser(ctx, channel, user, effective)
+		result := processors.KickResult{UserID: user.ID, OK: err == nil}
+		if err != nil {
+			result.Error = err.Error()
+		}
+		results = append(results, result)
+	}
+	return results
+}
+
+// effectiveOptions resolves per-channel overrides against the kicker defaults.
+func (d *Domain) effectiveOptions(override *processors.CleanOptions) processors.CleanOptions {
+	if override != nil {
+		return *override
+	}
+	return processors.CleanOptions{
+		KeepBanned:    d.keepBanned,
+		CleanMessages: d.cleanMessages,
+		CleanUnknown:  d.cleanUnknown,
+	}
+}
+
+// DefaultCleanOptions returns the process-wide defaults, used by channels
+// without their own CleanOptions.
+func (d *Domain) DefaultCleanOptions() processors.CleanOptions {
+	return d.effectiveOptions(nil)
+}
+
+// cleanUser bans then (optionally) unbans a single user. The bot client is
+// expected to be rate-limited and to handle Telegram FLOOD_WAIT (429)
+// internally.
 func (d *Domain) cleanUser(
 	ctx context.Context,
 	channel guard.ChannelInfo,
 	user guard.User,
-) bool {
+	opts processors.CleanOptions,
+) error {
 
-	if d.keepBanned || d.cleanMessages {
-		if err := d.botClient.Ban(ctx, channel.ID, user.ID, d.cleanMessages); err != nil {
-			d.log.Errorf("can't ban user %s: %s", user.Username, err)
-			return false
-		}
+	// Removing a member always takes a ban: Telegram has no plain "kick".
+	// Without KeepBanned the ban is lifted right away, so the user can rejoin
+	// through an invite link later.
+	if err := d.botClient.Ban(ctx, channel.ID, user.ID, opts.CleanMessages); err != nil {
+		d.log.Errorf("can't ban user %d (%s): %s", user.ID, user.Username, err)
+		return fmt.Errorf("ban: %w", err)
 	}
 
-	if !d.keepBanned {
-		// The previous implementation called Unban with OnlyIfBanned:false,
-		// so when the ban step did not succeed the unban still fired and
-		// produced a misleading "USER_NOT_PARTICIPANT" error logged as "ban".
-		// OnlyIfBanned handling now lives in the rate-limited client.
+	if !opts.KeepBanned {
 		if err := d.botClient.Unban(ctx, channel.ID, user.ID); err != nil {
-			d.log.Errorf("can't unban user %s: %s", user.Username, err)
-			return false
+			d.log.Errorf("can't unban user %d (%s): %s", user.ID, user.Username, err)
+			return fmt.Errorf("unban: %w", err)
 		}
 	}
 
-	return true
+	return nil
 }

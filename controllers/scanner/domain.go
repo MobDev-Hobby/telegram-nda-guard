@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 )
 
 type Domain struct {
@@ -46,6 +48,15 @@ type Domain struct {
 	tickerCasesMutex    sync.Mutex
 	tickerCases         []reflect.SelectCase
 	tickerCasesChannels []int64
+
+	// Mini App support: manual kicks go through userKicker, scans are kept
+	// in memory so a kick can only target users a scan actually returned.
+	userKicker          UserKicker
+	defaultCleanOptions processors.CleanOptions
+	miniAppURL          string
+	miniAppShortName    string
+	scansMutex          sync.Mutex
+	scans               map[string]*scanJob
 
 	// ready is closed once Run() finishes initialization, so HTTP/management
 	// surfaces can wait for (or poll) readiness before serving traffic.
@@ -91,6 +102,7 @@ func New(
 
 		processRequestChan: make(chan ScanRequest, 10),
 		ready:              make(chan struct{}),
+		scans:              make(map[string]*scanJob),
 	}
 
 	for _, opt := range opts {

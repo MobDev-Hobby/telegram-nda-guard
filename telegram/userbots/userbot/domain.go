@@ -1,9 +1,13 @@
 package userbot
 
 import (
+	"sync"
+
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
 	"go.uber.org/zap"
+
+	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
 
 type Domain struct {
@@ -11,6 +15,9 @@ type Domain struct {
 	sessionStorage SessionStorage
 	apiKey         string
 	userBot        *UserBotInstance
+
+	statsMutex sync.Mutex
+	stats      map[int64]guard.ScanStats
 }
 
 type UserBotInstance struct {
@@ -35,6 +42,7 @@ func New(
 			apiKey:         apiKey,
 			log:            Logger(zap.NewNop().Sugar()),
 			sessionStorage: sessionStorage,
+			stats:          make(map[int64]guard.ScanStats),
 		},
 	}
 

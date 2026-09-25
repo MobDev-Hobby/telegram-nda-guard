@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>NDA Guard</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app" aria-live="polite">
+    <p class="muted center" id="boot">…</p>
+  </main>
+
+  <template id="tpl-channels">
+    <section class="screen">
+      <h1 data-i18n="channelsTitle"></h1>
+      <p class="muted" data-i18n="channelsHint"></p>
+      <ul class="list" data-role="list"></ul>
+      <div class="empty" data-role="empty" hidden>
+        <p data-i18n="noChannels"></p>
+        <p class="muted" data-i18n="noChannelsHint"></p>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-channel">
+    <section class="screen">
+      <header class="channel-head">
+        <h1 data-role="title"></h1>
+        <span class="badge" data-role="kind"></span>
+      </header>
+      <ul class="warnings" data-role="warnings"></ul>
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tab-scan" aria-controls="panel-scan" data-tab="scan" data-i18n="tabScan"></button>
+        <button role="tab" id="tab-settings" aria-controls="panel-settings" data-tab="settings" data-i18n="tabSettings"></button>
+      </div>
+      <div role="tabpanel" id="panel-scan" aria-labelledby="tab-scan" data-panel="scan"></div>
+      <div role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" data-panel="settings" hidden></div>
+    </section>
+  </template>
+
+  <template id="tpl-scan-idle">
+    <div class="stack">
+      <p class="muted" data-i18n="scanIntro"></p>
+      <button class="primary" data-role="start" data-i18n="scanStart"></button>
+    </div>
+  </template>
+
+  <template id="tpl-scan-running">
+    <div class="stack">
+      <label for="scan-progress" data-role="label"></label>
+      <progress id="scan-progress" data-role="progress"></progress>
+    </div>
+  </template>
+
+  <template id="tpl-scan-result">
+    <div class="stack">
+      <p class="notice warn" data-role="partial" hidden></p>
+      <p class="notice" data-role="noclean" hidden></p>
+      <div class="filters" role="radiogroup" data-role="filters"></div>
+      <input type="search" class="search" data-role="search" autocomplete="off">
+      <div class="row-actions">
+        <button class="link" data-role="select-bad" data-i18n="selectBad"></button>
+        <button class="link" data-role="select-none" data-i18n="selectNone"></button>
+        <button class="link" data-role="rescan" data-i18n="rescan"></button>
+      </div>
+      <ul class="list users" data-role="users"></ul>
+      <p class="muted center" data-role="nothing" hidden data-i18n="nothingFound"></p>
+    </div>
+  </template>
+
+  <template id="tpl-settings">
+    <form class="stack" data-role="form">
+      <fieldset>
+        <legend data-i18n="groupAutomation"></legend>
+        <div data-role="automation"></div>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="groupCleaning"></legend>
+        <div data-role="cleaning"></div>
+      </fieldset>
+      <p class="muted" data-role="defaults"></p>
+    </form>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

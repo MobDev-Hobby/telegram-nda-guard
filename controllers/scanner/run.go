@@ -28,6 +28,7 @@ func (d *Domain) Run(
 				AutoScan:          protectedChannel.AutoScan,
 				AutoClean:         protectedChannel.AutoClean,
 				AllowClean:        protectedChannel.AllowClean,
+				CleanOptions:      protectedChannel.CleanOptions,
 			}
 			protectedChannel.CleanReportProcessor = d.defaultCleanProcessor
 			protectedChannel.ScanReportProcessor = d.defaultScanProcessor
@@ -49,6 +50,7 @@ func (d *Domain) Run(
 
 	d.log.Debugf("Setup telegram bot handlers")
 	d.setupCommands(ctx)
+	d.setupMiniAppMenu(ctx)
 	d.log.Debugf("Telegram bot handlers registered")
 
 	d.log.Debugf("Setup access levels for bot and userbots")
@@ -97,8 +99,8 @@ func (d *Domain) notifySuccessRun(ctx context.Context) {
 					fmt.Sprintf(
 						"\n• <b>%s</b>\n \t • Auto scan: <b>%t</b>\n \t • Auto clean: <b>%t</b>\n \t • Manual clean: <b>%t</b>\n",
 						title,
-						protectedChannel.AutoClean,
 						protectedChannel.AutoScan,
+						protectedChannel.AutoClean,
 						protectedChannel.AllowClean,
 					),
 				)

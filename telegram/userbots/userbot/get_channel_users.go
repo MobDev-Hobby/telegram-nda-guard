@@ -15,6 +15,7 @@ func (d *Domain) GetChannelUsers(
 ) ([]guard.User, error) {
 
 	var users = make([]guard.User, 0)
+	total := 0
 
 	chatList, err := d.userBot.client.API().ChannelsGetChannels(
 		ctx,
@@ -55,6 +56,9 @@ func (d *Domain) GetChannelUsers(
 
 				participants, ok := resp.(*tg.ChannelsChannelParticipants)
 				if participants != nil && ok {
+					if participants.Count > total {
+						total = participants.Count
+					}
 					for _, userObj := range participants.Users {
 						user, ok := userObj.(*tg.User)
 						if user != nil && ok {
@@ -87,5 +91,26 @@ func (d *Domain) GetChannelUsers(
 		}
 	}
 
+	stats := guard.ScanStats{Fetched: len(users), Total: total}
+	if stats.Total < stats.Fetched {
+		stats.Total = stats.Fetched
+	}
+	if stats.Partial() {
+		// Telegram hides part of the member list of large broadcast channels
+		// even from admins. Record it so reports can say the list is partial.
+		d.log.Warnf("channel %d: fetched %d of %d members", channelID, stats.Fetched, stats.Total)
+	}
+	d.statsMutex.Lock()
+	d.stats[channelID] = stats
+	d.statsMutex.Unlock()
+
 	return users, nil
+}
+
+// ChannelStats returns how complete the last member listing of channelID was.
+func (d *Domain) ChannelStats(channelID int64) (guard.ScanStats, bool) {
+	d.statsMutex.Lock()
+	defer d.statsMutex.Unlock()
+	stats, ok := d.stats[channelID]
+	return stats, ok
 }

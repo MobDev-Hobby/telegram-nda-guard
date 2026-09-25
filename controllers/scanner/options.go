@@ -1,6 +1,10 @@
 package scanner
 
-import "time"
+import (
+	"time"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+)
 
 type ProcessorOption func(*Domain)
 
@@ -135,5 +139,34 @@ func WithAuthorizer(authorizer Authorizer) func(*Domain) {
 	}
 	return func(d *Domain) {
 		d.authorizer = authorizer
+	}
+}
+
+// WithUserKicker enables manual kicks from the Mini App. The bundled
+// processors/kicker.Domain implements UserKicker; wire the same instance that
+// serves as the default clean processor so both paths share rate limiting.
+func WithUserKicker(kicker UserKicker) func(*Domain) {
+	return func(d *Domain) {
+		d.userKicker = kicker
+	}
+}
+
+// WithDefaultCleanOptions tells the controller which clean options apply to
+// channels without their own. It is used to display settings; keep it equal
+// to the defaults the clean processor was built with.
+func WithDefaultCleanOptions(opts processors.CleanOptions) func(*Domain) {
+	return func(d *Domain) {
+		d.defaultCleanOptions = opts
+	}
+}
+
+// WithMiniApp enables the /app command and the bot menu button. url is the
+// HTTPS address of the Mini App page. shortName is the Mini App short name
+// registered in BotFather; it is needed to open the app from groups, where
+// Telegram only allows t.me/<bot>/<shortName> links.
+func WithMiniApp(url, shortName string) func(*Domain) {
+	return func(d *Domain) {
+		d.miniAppURL = url
+		d.miniAppShortName = shortName
 	}
 }

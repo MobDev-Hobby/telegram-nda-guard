@@ -219,6 +219,15 @@ func main() {
 		scanner.WithDefaultScanProcessor(scanReporter),
 		scanner.WithDefaultCleanProcessor(cleanReporter),
 		scanner.WithDefaultAccessChecker(cachedAccessChecker),
+		// Mini App kicks go through the same rate-limited kicker as /clean.
+		scanner.WithUserKicker(cleanReporter),
+		scanner.WithDefaultCleanOptions(cleanReporter.DefaultCleanOptions()),
+	}
+	if options.MiniAppURL != "" {
+		if options.WebAddr == "" {
+			logger.Panicf("MINIAPP_URL needs WEB_ADDR: the Mini App is served by the web API")
+		}
+		controllerOptions = append(controllerOptions, scanner.WithMiniApp(options.MiniAppURL, options.MiniAppShortName))
 	}
 
 	// Authorization: when requested, restrict commands to the owner and to the
@@ -263,12 +272,18 @@ func main() {
 		if len(webSecret) < 32 {
 			logger.Panicf("WEB_SESSION_SECRET must be at least 32 bytes when WEB_ADDR is set")
 		}
+		webOptions := []webapi.Option{webapi.WithLogger(logger.Named("webapi"))}
+		if options.MiniAppURL != "" {
+			// The Mini App lets every channel administrator manage the
+			// channels they administer; the owner manages all of them.
+			webOptions = append(webOptions, webapi.WithMiniApp(ProtectorControllerDomain, webAuth))
+		}
 		webServer, err := webapi.New(
 			ProtectorControllerDomain,
 			webAuth,
 			options.TelegramBotKey,
 			webSecret,
-			webapi.WithLogger(logger.Named("webapi")),
+			webOptions...,
 		)
 		if err != nil {
 			logger.Panicf("can't init web api: %s", err)

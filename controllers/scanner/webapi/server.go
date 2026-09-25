@@ -20,7 +20,7 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner"
 )
 
-//go:embed webui/*.html webui/*.js
+//go:embed webui/*.html webui/*.js webui/miniapp
 var webuiFS embed.FS
 
 // Logger mirrors the project-wide logger contract (per-package duplicate, as
@@ -52,6 +52,9 @@ type Server struct {
 	cookieTTL     time.Duration
 	log           Logger
 	mux           *http.ServeMux
+
+	miniApp     scanner.MiniAppService
+	channelAuth ChannelAuthorizer
 }
 
 // Option configures a Server.
@@ -110,6 +113,13 @@ func New(
 	return s, nil
 }
 
+// Handler returns the HTTP handler serving the API and the web UIs, for
+// mounting into an existing server. When mounted under a path prefix, strip
+// the prefix first (http.StripPrefix); the Mini App uses relative URLs.
+func (s *Server) Handler() http.Handler {
+	return s.mux
+}
+
 // ListenAndServe starts the HTTP server on addr (e.g. ":8080"). It blocks
 // until the server stops.
 func (s *Server) ListenAndServe(addr string) error {
@@ -135,6 +145,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/channels", s.requireAuth(s.handleChannels))
 	s.mux.HandleFunc("/api/channels/", s.requireAuth(s.handleChannelByPath)) // {id}, {id}/users, {id}/scan, {id}/clean
 	s.mux.HandleFunc("/api/refresh-rights", s.requireAuth(s.handleRefreshRights))
+	s.miniAppRoutes()
 }
 
 // --- request/response helpers ---

@@ -90,12 +90,17 @@ to `.env` (gitignored). Highlights:
 | `REDIS_HOST` | Redis address (empty → no Redis) |
 | `REQUIRE_ADMIN_AUTH` | `true` → restrict commands to owner + chat admins |
 | `WEB_ADDR` / `WEB_SESSION_SECRET` | Optional web management UI (`WEB_ADDR` empty → disabled; secret ≥32 bytes when set) |
+| `MINIAPP_URL` / `MINIAPP_SHORT_NAME` | Optional Telegram Mini App (needs `WEB_ADDR`); URL is the public HTTPS address of `/miniapp/` |
 
 ## Telegram-specific guidance
 
 - **Rate limits:** 30 msg/s globally, 20 msg/min per chat. The ratelimited sender caps well below these; the kicker goes through `ratelimited.Restrictor` which also handles 429 (`bot.TooManyRequestsError` → sleep `RetryAfter` → retry once).
 - **Userbot:** uses session storage (AES-GCM at rest), `floodwait` middleware for MTProto flood waits.
 - **Channel management:** verify the bot has admin rights (invite + restrict members) before enabling AutoClean.
+- **Channels vs groups:** Telegram's `request_chat` picker lists either broadcast channels (`chat_is_channel: true`) or groups, never both, so `/add` offers two buttons. go-telegram/bot always serialises `chat_is_channel`; leaving it false hides every channel.
+- **Member lists:** `channels.getParticipants` may return only part of a large broadcast channel. The userbot records `Count` vs fetched (`guard.ScanStats`); reports and the Mini App must show a partial list as partial.
+- **Callbacks:** authorize inline-button presses by `CallbackQuery.From`. `CallbackQuery.Message.User` is the bot, which is an admin everywhere.
+- **Mini App:** `webapi.WithMiniApp` validates `initData` (HMAC key `"WebAppData"`), then authorizes per channel (`AuthorizeChannel`: owner/allowlist or channel admin). Kicks only target users from a finished scan of the same channel, never admins or the bot.
 
 ## Security notes
 

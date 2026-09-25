@@ -22,6 +22,17 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		d.IDHandler,
 	)
 
+	if d.miniAppURL != "" {
+		d.log.Debugf("Register /app handler")
+		d.telegramBot.RegisterHandler(
+			ctx,
+			func(update *guard.Update) bool {
+				return update.Message != nil && strings.HasPrefix(update.Message.Text, "/app")
+			},
+			d.AppHandler,
+		)
+	}
+
 	d.log.Debugf("Register /retry handler")
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -131,7 +142,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.SettingsHandler,
+		d.requireAuth(d.requireLinkedChannel(d.SettingsHandler)),
 	)
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -143,7 +154,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.SettingsChannelHandler,
+		d.requireAuth(d.requireLinkedChannel(d.SettingsChannelHandler)),
 	)
 
 	d.log.Debugf("Register /setflag handler")
@@ -157,7 +168,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.ToggleFlagHandler,
+		d.requireAuth(d.requireLinkedChannel(d.ToggleFlagHandler)),
 	)
 
 	d.log.Debugf("Register /users handlers")
@@ -171,7 +182,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.UsersHandler,
+		d.requireAuth(d.requireLinkedChannel(d.UsersHandler)),
 	)
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -183,7 +194,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.UsersHandler,
+		d.requireAuth(d.requireLinkedChannel(d.UsersHandler)),
 	)
 
 	d.log.Debugf("Register /remove handlers")
@@ -197,7 +208,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.RemoveChannelHandler,
+		d.requireAuth(d.requireLinkedChannel(d.RemoveChannelHandler)),
 	)
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -209,7 +220,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.RemoveConfirmHandler,
+		d.requireAuth(d.requireLinkedChannel(d.RemoveConfirmHandler)),
 	)
 
 	if d.defaultCleanProcessor != nil && d.defaultAccessChecker != nil {
@@ -234,7 +245,10 @@ func (d *Domain) setupCommands(ctx context.Context) {
 				}
 				return false
 			},
-			d.AddChannelCallbackHandler,
+			// Reply keyboards are visible to every member of a group, so the
+			// share itself must be authorized too, not only the /add that
+			// produced the button.
+			d.requireAuth(d.AddChannelCallbackHandler),
 		)
 	}
 

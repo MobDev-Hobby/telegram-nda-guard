@@ -6,7 +6,6 @@ import (
 	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
-	"github.com/MobDev-Hobby/telegram-nda-guard/storage/channels"
 )
 
 // channelView builds a value-copy ChannelView from the in-memory caches. The
@@ -21,17 +20,19 @@ func (d *Domain) channelViewLocked(channelID int64) (ChannelView, bool) {
 		if !pcOK {
 			return ChannelView{}, false
 		}
-		return ChannelView{
+		v := ChannelView{
 			ID:           pc.ID,
 			Title:        fmt.Sprintf("%d", channelID),
 			CommandChats: append([]int64(nil), pc.CommandChannelIDs...),
 			AutoScan:     pc.AutoScan,
 			AutoClean:    pc.AutoClean,
 			AllowClean:   pc.AllowClean,
-		}, true
+		}
+		d.fillCleanOptions(&v, pc)
+		return v, true
 	}
-	pc, _ := d.protectedChannels[channelID]
-	return ChannelView{
+	pc := d.protectedChannels[channelID]
+	v := ChannelView{
 		ID:           ch.id,
 		Title:        ch.title,
 		ChatType:     ch.chatType,
@@ -42,7 +43,20 @@ func (d *Domain) channelViewLocked(channelID int64) (ChannelView, bool) {
 		BotOnChannel: ch.botOnChannel,
 		BotCanInvite: ch.botCanInvite,
 		BotCanClean:  ch.botCanClean,
-	}, true
+	}
+	d.fillCleanOptions(&v, pc)
+	return v, true
+}
+
+func (d *Domain) fillCleanOptions(v *ChannelView, pc ProtectedChannel) {
+	opts := d.defaultCleanOptions
+	if pc.CleanOptions != nil {
+		opts = *pc.CleanOptions
+		v.CustomCleanOptions = true
+	}
+	v.KeepBanned = opts.KeepBanned
+	v.CleanMessages = opts.CleanMessages
+	v.CleanUnknown = opts.CleanUnknown
 }
 
 // ListChannels implements ManagementService.
@@ -133,26 +147,28 @@ func (d *Domain) SetChannelFlags(ctx context.Context, channelID int64, autoScan,
 // applyFlagSet is the absolute-value counterpart of applyFlagToggle. It is kept
 // separate so the toggle handler's semantics (flip one flag) stay untouched.
 func (d *Domain) applyFlagSet(ctx context.Context, channelID int64, autoScan, autoClean, allowClean bool) error {
+	return d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
+		pc.AutoScan = autoScan
+		pc.AutoClean = autoClean
+		pc.AllowClean = allowClean
+	})
+}
+
+// updateProtectedChannel applies mutate to a protected channel, persists the
+// result and keeps the periodic ticker in sync with AutoScan/AutoClean.
+func (d *Domain) updateProtectedChannel(ctx context.Context, channelID int64, mutate func(pc *ProtectedChannel)) error {
 	d.channelsMutex.Lock()
 	pc, ok := d.protectedChannels[channelID]
 	if !ok {
 		d.channelsMutex.Unlock()
 		return fmt.Errorf("channel %d not found", channelID)
 	}
-	pc.AutoScan = autoScan
-	pc.AutoClean = autoClean
-	pc.AllowClean = allowClean
+	mutate(&pc)
 
 	if d.storage != nil {
 		storeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		if err := d.storage.Store(storeCtx, &channels.ProtectedChannel{
-			ID:                pc.ID,
-			CommandChannelIDs: pc.CommandChannelIDs,
-			AutoScan:          pc.AutoScan,
-			AutoClean:         pc.AutoClean,
-			AllowClean:        pc.AllowClean,
-		}); err != nil {
+		if err := d.storage.Store(storeCtx, storageRecord(pc)); err != nil {
 			d.channelsMutex.Unlock()
 			return fmt.Errorf("persist channel: %w", err)
 		}
@@ -169,8 +185,8 @@ func (d *Domain) applyFlagSet(ctx context.Context, channelID int64, autoScan, au
 	case !needsTicker && hasTicker:
 		d.removeTickers(channelID)
 	}
-	d.log.Infof("set flags for channel %d -> autoscan=%t autoclean=%t allowclean=%t",
-		channelID, pc.AutoScan, pc.AutoClean, pc.AllowClean)
+	d.log.Infof("updated channel %d -> autoscan=%t autoclean=%t allowclean=%t cleanoptions=%+v",
+		channelID, pc.AutoScan, pc.AutoClean, pc.AllowClean, pc.CleanOptions)
 	return nil
 }
 
