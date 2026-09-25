@@ -35,6 +35,11 @@ func New(apiKey string, opts ...TelegramBotOption) (*Domain, error) {
 	d.botClient, err = bot.New(
 		apiKey, []bot.Option{
 			bot.WithSkipGetMe(),
+			// go-telegram/bot runs handlers in separate goroutines by default
+			// since v1.9. The controller's command handlers were written for
+			// one-at-a-time processing (e.g. channel removal touches shared
+			// maps), so keep updates sequential.
+			bot.WithNotAsyncHandlers(),
 			// Telegram remembers the last allowed_updates list; without an
 			// explicit one, a list set by an earlier deployment would keep
 			// membership and join-request updates from arriving.

@@ -7,7 +7,7 @@ web management UI.
 
 ## Tech stack (actual)
 
-- **Language:** Go 1.21 (`go.mod`), toolchain `go1.23.x`
+- **Language:** Go 1.26 (`go.mod`)
 - **Telegram:** `github.com/go-telegram/bot` (Bot API), `github.com/gotd/td` + `github.com/gotd/contrib` (MTProto userbot, with `floodwait` middleware)
 - **Storage:** Redis via `github.com/redis/go-redis/v9` (sessions + channel config), file fallback for sessions
 - **Config:** `github.com/caarlos0/env/v11` + `github.com/joho/godotenv`

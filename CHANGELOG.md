@@ -114,6 +114,17 @@ Both batches below ship in this release.
   `WithAdminCacheTTL` (administrator lists are cached for a minute).
 - `guard.InlineButton.URL` / `WebAppURL`, `guard.CallbackQuery.From`.
 
+#### Changed
+
+- Dependencies updated to their latest versions: `go-telegram/bot` 1.8.2 →
+  1.27.0, `gotd/td` 0.110.1 → 0.162.0 (fixes GO-2026-6138), `gotd/contrib`
+  0.25.0, `go-redis/v9` 9.22.0, `caarlos0/env/v11` 11.4.1, `zap` 1.28.0,
+  `testify` 1.12.1, `golang.org/x/{sys,time,crypto,net}` latest (x/crypto
+  fixes GO-2026-6355/6354/6303).
+- go-telegram/bot runs handlers in separate goroutines by default since
+  v1.9; the bot opts out (`WithNotAsyncHandlers`) to keep updates processed
+  one at a time as before.
+
 #### Security
 
 - Inline-button presses were authorized against
@@ -175,6 +186,8 @@ Both batches below ship in this release.
   client for the audit log needs `ListPush`/`ListRange`.
 - Mini App users must **Join** each channel once before managing it
   (`ProtectedChannel.Managers` starts empty).
+- **Requires Go 1.26** (`go.mod`), up from 1.23: the updated `golang.org/x/*`
+  modules need it.
 - This is a pre-1.0 minor release: it contains the breaking changes above.
 - Mini App (optional): serve `webapi.Server` over public HTTPS, pass
   `webapi.WithMiniApp(domain, hybridAuthorizer)` and
