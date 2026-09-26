@@ -105,7 +105,7 @@ func (s *Server) handleMiniAppAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"token":       s.newSessionTokenTTL(user.ID, s.miniAppSession),
+		"token":       s.newSessionTokenTTL(user.ID, s.miniAppSession, sessionMiniApp),
 		"userId":      user.ID,
 		"privileged":  s.channelAuth.IsPrivileged(r.Context(), user.ID),
 		"botUsername": s.miniApp.BotUsername(),

@@ -24,7 +24,8 @@ func (m *memLists) ListPush(_ context.Context, key string, value []byte, maxLen 
 }
 func (m *memLists) ListRange(_ context.Context, key string, limit int64) ([][]byte, error) {
 	l := m.lists[key]
-	if int64(len(l)) > limit {
+	// Like LRANGE key 0 limit-1: a non-positive limit means the whole list.
+	if limit > 0 && int64(len(l)) > limit {
 		l = l[:limit]
 	}
 	return l, nil
@@ -49,4 +50,14 @@ func TestAuditNewestFirstAndCapped(t *testing.T) {
 	events, err = d.ListAudit(ctx, -1001, 2)
 	require.NoError(t, err)
 	assert.Len(t, events, 2)
+}
+
+func TestAuditNonPositiveLimitReturnsNothing(t *testing.T) {
+	d, ctx := New(&memLists{lists: map[string][][]byte{}}), context.Background()
+	require.NoError(t, d.AppendAudit(ctx, -1001, audit.Event{Action: "a"}))
+	for _, limit := range []int{0, -1} {
+		events, err := d.ListAudit(ctx, -1001, limit)
+		require.NoError(t, err)
+		assert.Empty(t, events, "limit %d", limit)
+	}
 }

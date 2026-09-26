@@ -1,6 +1,8 @@
 // Package whitelist holds the per-channel whitelist model. A whitelisted user
-// skips the access check in that channel until the approval expires; it must
-// then be re-approved by a channel administrator.
+// skips the access check in that channel. When the approval expires
+// (ExpiresAt) the entry keeps protecting the user and administrators are
+// reminded to review it. Access ends only when a temporary entry reaches
+// DeleteAt or an administrator removes the entry.
 package whitelist
 
 import "time"

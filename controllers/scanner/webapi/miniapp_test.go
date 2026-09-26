@@ -236,7 +236,7 @@ func newMiniAppServer(t *testing.T) (*Server, *fakeMiniApp) {
 
 func miniAppRequest(s *Server, uid int64, method, target, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+s.newSessionToken(uid))
+	req.Header.Set("Authorization", "Bearer "+s.newSessionTokenTTL(uid, time.Hour, sessionMiniApp))
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	return rec
@@ -257,7 +257,7 @@ func TestMiniAppAuthIssuesToken(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, int64(5), resp.UserID)
 	assert.False(t, resp.Privileged)
-	uid, ok := s.validateSessionToken(resp.Token)
+	uid, ok := s.validateSessionToken(resp.Token, sessionMiniApp)
 	assert.True(t, ok)
 	assert.Equal(t, int64(5), uid)
 }
@@ -517,4 +517,34 @@ func TestMiniAppAuthReturnsBotUsername(t *testing.T) {
 	rec := postAuth(t, s, initDataFor(t, 5, time.Now()))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"botUsername":"guardbot"`)
+}
+
+func TestSessionKindsAreNotInterchangeable(t *testing.T) {
+	s, _ := newMiniAppServer(t)
+
+	// A dashboard cookie doesn't open the Mini App API...
+	req := httptest.NewRequest(http.MethodGet, "/api/miniapp/channels", nil)
+	req.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.newSessionToken(5)})
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code, "dashboard cookie")
+
+	// ...nor does the same token sent as Bearer.
+	req = httptest.NewRequest(http.MethodGet, "/api/miniapp/channels", nil)
+	req.Header.Set("Authorization", "Bearer "+s.newSessionToken(5))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code, "dashboard token as Bearer")
+
+	// A Mini App token doesn't open the dashboard API, as cookie or Bearer.
+	mini := s.newSessionTokenTTL(42, time.Hour, sessionMiniApp)
+	req = httptest.NewRequest(http.MethodGet, "/api/channels", nil)
+	req.AddCookie(&http.Cookie{Name: s.cookieName, Value: mini})
+	req.Header.Set("Authorization", "Bearer "+mini)
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code, "mini app token on the dashboard")
+
+	// Control: the right kinds work.
+	assert.Equal(t, http.StatusOK, miniAppRequest(s, 5, http.MethodGet, "/api/miniapp/channels", "").Code)
 }

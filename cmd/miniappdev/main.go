@@ -122,6 +122,9 @@ func (s *svc) GetChannelScan(context.Context, int64, string) (scanner.ScanView, 
 func (s *svc) KickScannedUsers(_ context.Context, _ int64, _ string, ids []int64, _ int64) ([]processors.KickResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.scan == nil {
+		return nil, scanner.ErrScanNotFound
+	}
 	out := []processors.KickResult{}
 	for _, uid := range ids {
 		if uid == 3 {
@@ -141,6 +144,9 @@ func (s *svc) KickScannedUsers(_ context.Context, _ int64, _ string, ids []int64
 func (s *svc) RecheckScannedUser(_ context.Context, _ int64, _ string, userID, _ int64) (scanner.ScannedUser, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.scan == nil {
+		return scanner.ScannedUser{}, scanner.ErrScanNotFound
+	}
 	t := now()
 	for i := range s.scan.Users {
 		u := &s.scan.Users[i]
@@ -172,6 +178,12 @@ func (s *svc) ListWhitelist(context.Context, int64) ([]scanner.WhitelistEntryVie
 func (s *svc) AddToWhitelist(_ context.Context, _ int64, _ string, ids []int64, note string, ttl time.Duration, caller int64) ([]scanner.WhitelistEntryView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.scan == nil {
+		return nil, scanner.ErrScanNotFound
+	}
+	if len(ids) == 0 {
+		return nil, errors.New("no users selected")
+	}
 	out := []scanner.WhitelistEntryView{}
 	for _, id := range ids {
 		for i := range s.scan.Users {
@@ -269,6 +281,9 @@ func (s *svc) ResolveJoinRequests(_ context.Context, _ int64, ids []int64, appro
 		}
 	}
 	s.joins = keep
+	if len(ids) == 0 {
+		return out, nil
+	}
 	act := audit.ActionJoinDeclined
 	if approve {
 		act = audit.ActionJoinApproved

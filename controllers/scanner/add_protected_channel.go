@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -92,23 +93,32 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 		return errors.New("invalid id")
 	}
 
+	// Adding a channel that is already protected (e.g. /add from another chat)
+	// only adds control chats and managers; everything else stays as is.
+	d.channelsMutex.Lock()
+	existing, found := d.protectedChannels[channel.ID]
+	d.channelsMutex.Unlock()
+	record := *channel
+	if found {
+		record = mergeProtectedChannel(existing, *channel)
+	}
+
 	if d.storage != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		err := d.storage.Store(ctx, storageRecord(*channel))
+		err := d.storage.Store(ctx, storageRecord(record))
 		if err != nil {
 			return err
 		}
 	}
 	d.channelsMutex.Lock()
-	// Channel cache
-	d.channels[channel.ID] = ChannelInfo{
-		id:                channel.ID,
-		commandChannelIDs: channel.CommandChannelIDs,
-	}
 
 	// Protected channels list
-	if _, found := d.protectedChannels[channel.ID]; !found {
+	if existing, found := d.protectedChannels[channel.ID]; found {
+		merged := mergeProtectedChannel(existing, *channel)
+		d.protectedChannels[channel.ID] = merged
+		channel = &merged
+	} else {
 		d.protectedChannels[channel.ID] = *channel
 
 		// Ticker
@@ -135,6 +145,12 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 		}
 	}
 
+	// Channel cache
+	info := d.channels[channel.ID]
+	info.id = channel.ID
+	info.commandChannelIDs = channel.CommandChannelIDs
+	d.channels[channel.ID] = info
+
 	// Command channels cache
 	for _, commandChannelID := range channel.CommandChannelIDs {
 		haveChannel := false
@@ -157,6 +173,25 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 	d.log.Infof("Added protected channel %d/%v", channel.ID, channel.CommandChannelIDs)
 
 	return nil
+}
+
+// mergeProtectedChannel adds the control chats and managers of added to
+// existing and keeps every other field of existing.
+func mergeProtectedChannel(existing, added ProtectedChannel) ProtectedChannel {
+	merged := existing
+	merged.CommandChannelIDs = slices.Clone(existing.CommandChannelIDs)
+	for _, id := range added.CommandChannelIDs {
+		if !slices.Contains(merged.CommandChannelIDs, id) {
+			merged.CommandChannelIDs = append(merged.CommandChannelIDs, id)
+		}
+	}
+	merged.Managers = slices.Clone(existing.Managers)
+	for _, id := range added.Managers {
+		if !slices.Contains(merged.Managers, id) {
+			merged.Managers = append(merged.Managers, id)
+		}
+	}
+	return merged
 }
 
 func (d *Domain) applyOptions(opts []TickerOption, channelID int64) error {

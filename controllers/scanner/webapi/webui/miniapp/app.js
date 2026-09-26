@@ -291,6 +291,7 @@
   let mainHandler = null;
   let backHandler = null;
   let pollTimer = null;
+  let pollGen = 0; // bumped on every stop: late responses of older polls are dropped
 
   function setMainButton(text, handler, { destructive = false } = {}) {
     if (!tg) return;
@@ -409,6 +410,7 @@
   function stopPolling() {
     clearTimeout(pollTimer);
     pollTimer = null;
+    pollGen++;
   }
 
   function formatDate(iso) {
@@ -628,8 +630,10 @@
 
   async function pollScan(panel, channel, scanId) {
     stopPolling();
+    const gen = pollGen;
     try {
       const scan = await api(`channels/${channel.id}/scans/${scanId}`);
+      if (gen !== pollGen) return; // the user moved on meanwhile
       if (scan.state === "running") {
         renderScanRunning(panel, scan);
         pollTimer = setTimeout(() => pollScan(panel, channel, scanId), POLL_MS);
@@ -642,6 +646,7 @@
       }
       renderScanResult(panel, channel, scan);
     } catch (err) {
+      if (gen !== pollGen) return;
       panel.replaceChildren(notice(T.scanFailed + err.message, true));
     }
   }

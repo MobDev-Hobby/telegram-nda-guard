@@ -471,3 +471,21 @@ func ids(users []guard.User) []int64 {
 	}
 	return out
 }
+
+func TestKickFromOlderScanSkipsUsersWhitelistedSince(t *testing.T) {
+	env := newWhitelistDomain(t)
+	d, ctx := env.d, context.Background()
+
+	older, u := scanUser(t, d, 1)
+	require.False(t, u.Protected)
+	// Another admin whitelists the user from a newer scan.
+	newer, _ := scanUser(t, d, 1)
+	_, err := d.AddToWhitelist(ctx, testChannelID, newer.ID, []int64{1}, "", 0, testAdminID)
+	require.NoError(t, err)
+
+	results, err := d.KickScannedUsers(ctx, testChannelID, older.ID, []int64{1}, testAdminID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.False(t, results[0].OK)
+	assert.Contains(t, results[0].Error, "whitelisted")
+}

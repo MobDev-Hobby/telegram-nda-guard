@@ -577,6 +577,17 @@ func (d *Domain) KickScannedUsers(
 	}
 	d.scansMutex.Unlock()
 
+	// The scan may predate a whitelist entry added since (another session).
+	allowed := toKick[:0]
+	for _, u := range toKick {
+		if _, listed := d.whitelistEntry(ctx, channelID, u.ID); listed {
+			results = append(results, processors.KickResult{UserID: u.ID, Error: "protected: whitelisted"})
+			continue
+		}
+		allowed = append(allowed, u)
+	}
+	toKick = allowed
+
 	channel := guard.ChannelInfo{ID: channelID, Title: ch.title, Type: ch.chatType}
 	kicked := d.userKicker.KickUsers(ctx, channel, toKick, pc.CleanOptions)
 	results = append(results, kicked...)

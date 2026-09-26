@@ -140,8 +140,27 @@ Both batches below ship in this release.
 - Web dashboard: `?chat=` authorized the caller for that chat but was never
   matched against the channel, so an admin of any chat could act on every
   channel. The channel must now be controlled from `?chat=`.
+- Web sessions carry a signed kind: the dashboard accepts only its cookie,
+  the Mini App API only its Bearer token. A dashboard session no longer
+  bypasses the Mini App employee check or its one-hour lifetime.
 
 #### Fixed
+
+- Re-adding an already protected channel (`/add` from another chat) replaced
+  its stored record with defaults (control chats, clean options, managers,
+  last check, join request mode). The new control chat and manager are now
+  merged into the existing record.
+- A join request Telegram no longer has (withdrawn, or the user already
+  joined) was stored again after the failed approval and stayed pending
+  forever. It is now dropped (`scanner.ErrJoinRequestGone`).
+- Mini App kicks re-check the whitelist, so users whitelisted after the scan
+  (from another session) aren't removed from an older scan.
+- The whitelist is loaded from storage outside the shared lock and with a
+  timeout; a slow Redis no longer stalls checks in every channel.
+- `storage/audit/redis`: `ListAudit` with `limit <= 0` returned the whole
+  log; it now returns nothing.
+- Mini App: a late scan poll response no longer replaces a tab the user
+  already switched to.
 
 - Mini App: controls styled with `all: unset` ignored the `hidden`
   attribute.
@@ -188,6 +207,8 @@ Both batches below ship in this release.
   (`ProtectedChannel.Managers` starts empty).
 - **Requires Go 1.26** (`go.mod`), up from 1.23: the updated `golang.org/x/*`
   modules need it.
+- Web session tokens changed format: existing dashboard sessions are
+  invalidated once, users sign in again.
 - This is a pre-1.0 minor release: it contains the breaking changes above.
 - Mini App (optional): serve `webapi.Server` over public HTTPS, pass
   `webapi.WithMiniApp(domain, hybridAuthorizer)` and

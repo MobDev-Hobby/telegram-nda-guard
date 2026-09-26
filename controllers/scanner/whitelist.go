@@ -86,17 +86,30 @@ func (d *Domain) withWhitelist(channelID int64, checker CheckUserAccess) CheckUs
 // change is written through.
 func (d *Domain) channelWhitelist(ctx context.Context, channelID int64) (map[int64]whitelist.Entry, error) {
 	d.whitelistMutex.Lock()
-	defer d.whitelistMutex.Unlock()
-	if entries, ok := d.whitelists[channelID]; ok {
+	entries, ok := d.whitelists[channelID]
+	d.whitelistMutex.Unlock()
+	if ok {
 		return entries, nil
 	}
-	loaded, err := d.whitelistStorage.LoadWhitelist(ctx, channelID)
+
+	// Load outside the lock (it's shared by all channels) and with a
+	// deadline, so a slow Redis doesn't stall every check.
+	loadCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	loaded, err := d.whitelistStorage.LoadWhitelist(loadCtx, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("load whitelist of %d: %w", channelID, err)
 	}
-	entries := make(map[int64]whitelist.Entry, len(loaded))
+	entries = make(map[int64]whitelist.Entry, len(loaded))
 	for _, e := range loaded {
 		entries[e.UserID] = e
+	}
+
+	d.whitelistMutex.Lock()
+	defer d.whitelistMutex.Unlock()
+	if current, ok := d.whitelists[channelID]; ok {
+		// Someone else loaded it meanwhile and may have changed it since.
+		return current, nil
 	}
 	d.whitelists[channelID] = entries
 	return entries, nil

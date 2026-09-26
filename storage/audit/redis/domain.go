@@ -63,6 +63,10 @@ func (d *Domain) AppendAudit(ctx context.Context, channelID int64, event audit.E
 
 // ListAudit returns up to limit most recent events of channelID, newest first.
 func (d *Domain) ListAudit(ctx context.Context, channelID int64, limit int) ([]audit.Event, error) {
+	if limit <= 0 {
+		// LRANGE 0 -1 would return the whole list.
+		return nil, nil
+	}
 	raw, err := d.redis.ListRange(ctx, d.key(channelID), int64(limit))
 	if err != nil {
 		if d.redis.IsNil(err) {

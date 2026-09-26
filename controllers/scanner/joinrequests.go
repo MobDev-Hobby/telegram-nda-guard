@@ -39,6 +39,9 @@ var (
 	ErrJoinRequestsDisabled = errors.New("join requests are not configured")
 	ErrJoinRequestNotFound  = errors.New(errRequestNotPending)
 	ErrBadJoinMode          = errors.New("join request mode must be off, auto or manual")
+	// ErrJoinRequestGone: Telegram no longer has the request (withdrawn, or
+	// the user joined some other way). It is already dropped from storage.
+	ErrJoinRequestGone = errors.New("the request is no longer pending")
 )
 
 // JoinRequestStorage keeps pending join requests.
@@ -159,7 +162,7 @@ func (d *Domain) JoinRequestHandler(ctx context.Context, update *guard.Update) {
 	r.Check = d.checkJoinUser(ctx, pc, r, false)
 
 	if pc.JoinRequestMode == JoinModeAuto && r.Check == UserStatusGood {
-		if err := d.resolveJoin(ctx, pc, r, true, 0); err == nil {
+		if err := d.resolveJoin(ctx, pc, r, true, 0); err == nil || errors.Is(err, ErrJoinRequestGone) {
 			return
 		}
 		// Approval failed (rights, network): keep it pending for later.
@@ -202,7 +205,7 @@ func (d *Domain) resolveJoin(ctx context.Context, pc ProtectedChannel, r joinreq
 	d.dropJoinRequest(ctx, pc.ID, r.UserID)
 	if gone {
 		// The user withdrew the request or joined some other way.
-		return fmt.Errorf("the request is no longer pending: %w", err)
+		return fmt.Errorf("%w: %w", ErrJoinRequestGone, err)
 	}
 
 	action := audit.ActionJoinDeclined
@@ -315,7 +318,7 @@ func (d *Domain) recheckJoin(ctx context.Context, pc ProtectedChannel, r joinreq
 		Details: map[string]any{"check": r.Check},
 	}, "")
 	if pc.JoinRequestMode == JoinModeAuto && r.Check == UserStatusGood {
-		if err := d.resolveJoin(ctx, pc, r, true, 0); err == nil {
+		if err := d.resolveJoin(ctx, pc, r, true, 0); err == nil || errors.Is(err, ErrJoinRequestGone) {
 			return r, true
 		}
 	}

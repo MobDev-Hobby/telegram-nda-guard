@@ -318,3 +318,30 @@ func TestAddFromPrivateChatNeedsEmployeeAndMakesManager(t *testing.T) {
 type denyAll struct{}
 
 func (denyAll) Authorize(context.Context, *guard.Update) (bool, error) { return false, nil }
+
+func TestJoinGoneRequestIsNotStoredAgain(t *testing.T) {
+	env, store, checker := newJoinEnv(t)
+	d, ctx := env.d, context.Background()
+	setJoinMode(t, d, JoinModeAuto)
+
+	// The requester withdrew before the bot got to it.
+	joinMu.Lock()
+	joinGone[2] = true
+	joinMu.Unlock()
+	d.JoinRequestHandler(ctx, joinUpdate(2, "emp"))
+	assert.NotContains(t, store.reqs[testChannelID], int64(2), "a gone request isn't kept")
+
+	// Same on the daily recheck: a stranger who later passes but withdrew.
+	d.JoinRequestHandler(ctx, joinUpdate(3, "stranger"))
+	require.Contains(t, store.reqs[testChannelID], int64(3))
+	checker.set(3, true)
+	joinMu.Lock()
+	joinGone[3] = true
+	joinMu.Unlock()
+	env.clock.add(25 * time.Hour)
+	d.recheckJoinRequests(ctx)
+	assert.NotContains(t, store.reqs[testChannelID], int64(3))
+	reqs, err := d.ListJoinRequests(ctx, testChannelID)
+	require.NoError(t, err)
+	assert.Empty(t, reqs)
+}
