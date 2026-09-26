@@ -1,0 +1,177 @@
+/* Colors come from Telegram's theme (telegram-web-app.js sets --tg-theme-*);
+   the fallbacks cover opening the page outside Telegram. */
+:root {
+  color-scheme: light dark;
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --bg2: var(--tg-theme-secondary-bg-color, #f1f2f5);
+  --text: var(--tg-theme-text-color, #111111);
+  --hint: var(--tg-theme-hint-color, #7d7f85);
+  --link: var(--tg-theme-link-color, #2481cc);
+  --accent: var(--tg-theme-button-color, #2481cc);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --danger: var(--tg-theme-destructive-text-color, #d9363e);
+  --section: var(--tg-theme-section-bg-color, var(--bg));
+  --sep: color-mix(in srgb, var(--hint) 25%, transparent);
+  --radius: 12px;
+  /* Traffic light. */
+  --green: #2ea44f;
+  --yellow: #e6a100;
+  --orange: #f08c00;
+  --red: #e03131;
+  --blue: #1c7ed6;
+  --grey: #adb5bd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tg]) {
+    --bg: #17212b;
+    --bg2: #0e1621;
+    --text: #f5f5f5;
+    --hint: #8b98a5;
+  }
+}
+
+* { box-sizing: border-box; }
+/* Several controls use `all: unset`, which would otherwise override the
+   UA's display:none for [hidden]. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg2);
+  color: var(--text);
+  font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  accent-color: var(--accent);
+  -webkit-tap-highlight-color: transparent;
+}
+
+main { padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); max-width: 720px; margin: 0 auto; }
+h1 { font-size: 20px; margin: 4px 0 6px; overflow-wrap: anywhere; }
+h2 { font-size: 13px; font-weight: 500; color: var(--hint); text-transform: uppercase; letter-spacing: .02em; margin: 20px 4px 6px; }
+.muted { color: var(--hint); font-size: 13px; }
+.center { text-align: center; }
+.stack { display: grid; gap: 12px; }
+
+.list { list-style: none; margin: 8px 0 0; padding: 0; background: var(--section); border-radius: var(--radius); overflow: hidden; }
+.list > li + li { border-top: 1px solid var(--sep); }
+.row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px 12px; padding: 10px 14px; }
+.row.disabled .row-main { opacity: .55; }
+.row-main { min-width: 0; }
+.row-title { font-weight: 600; overflow-wrap: anywhere; }
+.row-sub { display: block; color: var(--hint); font-size: 12px; overflow-wrap: anywhere; }
+.row-note { display: block; font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+.row-actions { display: flex; gap: 14px; flex-wrap: wrap; grid-column: 2 / -1; }
+.row-lead { display: flex; align-items: center; gap: 10px; }
+button.item { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; }
+button.item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--grey); flex: none; }
+.dot.green { background: var(--green); }
+.dot.yellow { background: var(--yellow); }
+.dot.red { background: var(--red); }
+.dot.orange { background: var(--orange); }
+.dot.blue { background: var(--blue); }
+.dot.grey { background: var(--grey); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--hint); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend .dot { width: 9px; height: 9px; }
+
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg2); color: var(--hint); white-space: nowrap; }
+.badge.warn { background: color-mix(in srgb, var(--yellow) 22%, transparent); color: #9a6b00; }
+
+.channel-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.channel-head h1 { display: flex; align-items: center; gap: 8px; }
+
+.notice { margin: 0; padding: 10px 12px; border-radius: var(--radius); background: var(--section); font-size: 14px; }
+.notice.warn { background: color-mix(in srgb, var(--yellow) 15%, var(--section)); }
+
+.tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 12px 0; }
+.tabs button { all: unset; flex: none; padding: 7px 14px; border-radius: 999px; background: var(--section); cursor: pointer; font-size: 14px; white-space: nowrap; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+button.primary, button.secondary {
+  appearance: none; border-radius: var(--radius); padding: 11px; font: inherit; font-weight: 600; cursor: pointer;
+}
+button.primary { border: 0; background: var(--accent); color: var(--accent-text); }
+button.secondary { border: 1px solid var(--accent); background: transparent; color: var(--accent); }
+button.secondary.danger { border-color: var(--danger); color: var(--danger); }
+button.primary:disabled, button.secondary:disabled { opacity: .5; }
+button.primary:focus-visible, button.secondary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.link { all: unset; color: var(--link); cursor: pointer; font-size: 14px; }
+button.link.danger { color: var(--danger); }
+button.link:focus-visible { outline: 2px solid var(--accent); }
+button.icon { all: unset; cursor: pointer; color: var(--link); font-size: 18px; line-height: 1; padding: 4px 6px; border-radius: 8px; }
+button.icon:focus-visible { outline: 2px solid var(--accent); }
+button.icon[aria-busy="true"] { opacity: .4; }
+.bar { display: flex; gap: 16px; flex-wrap: wrap; }
+.buttons { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+
+progress { width: 100%; height: 8px; }
+
+.filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.filters label { flex: none; }
+.filters input { position: absolute; opacity: 0; pointer-events: none; }
+.filters span { display: inline-block; padding: 6px 12px; border-radius: 999px; background: var(--section); font-size: 13px; cursor: pointer; }
+.filters input:checked + span { background: var(--accent); color: var(--accent-text); }
+.filters input:focus-visible + span { outline: 2px solid var(--accent); }
+
+input.search, textarea, select, input[type="number"] {
+  width: 100%; padding: 10px 12px; border: 0; border-radius: var(--radius); background: var(--section); color: var(--text); font: inherit;
+}
+textarea { resize: vertical; min-height: 64px; }
+.panel { background: var(--section); border-radius: var(--radius); padding: 12px; display: grid; gap: 10px; }
+.panel label { display: grid; gap: 4px; font-size: 13px; color: var(--hint); }
+.panel textarea, .panel select, .panel input { background: var(--bg2); }
+
+.row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+
+fieldset { border: 0; margin: 0; padding: 0; }
+legend { color: var(--hint); font-size: 13px; text-transform: uppercase; letter-spacing: .02em; padding: 0 4px 6px; }
+fieldset > div { background: var(--section); border-radius: var(--radius); overflow: hidden; }
+.switch { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px 14px; align-items: center; cursor: pointer; }
+.switch + .switch { border-top: 1px solid var(--sep); }
+.switch small { grid-column: 1; color: var(--hint); font-size: 12px; }
+.switch input { grid-row: 1 / span 2; grid-column: 2; }
+.segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 10px 14px 6px; }
+.segmented label { position: relative; }
+.segmented input { position: absolute; opacity: 0; }
+.segmented span { display: block; text-align: center; padding: 7px 4px; border-radius: 10px; background: var(--bg2); font-size: 14px; cursor: pointer; }
+.segmented input:checked + span { background: var(--accent); color: var(--accent-text); }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); }
+.hint-row { padding: 0 14px 12px; color: var(--hint); font-size: 12px; }
+
+/* Toggle switch built on a real checkbox (role="switch"), so keyboard and
+   screen-reader behaviour stay native. */
+input[role="switch"] {
+  appearance: none; width: 46px; height: 28px; border-radius: 999px; margin: 0;
+  background: color-mix(in srgb, var(--hint) 45%, transparent); position: relative; cursor: pointer;
+  transition: background .15s;
+}
+input[role="switch"]::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: transform .15s;
+}
+input[role="switch"]:checked { background: var(--accent); }
+input[role="switch"]:checked::after { transform: translateX(18px); }
+input[role="switch"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* accent-color does not tint checkboxes on older WebKit webviews: draw the
+   selection checkbox ourselves there. */
+@supports not (accent-color: red) {
+  .row input[type="checkbox"] {
+    appearance: none; border: 2px solid var(--hint); border-radius: 6px; display: grid; place-content: center;
+  }
+  .row input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+  .row input[type="checkbox"]:checked::after { content: "✓"; color: var(--accent-text); font-size: 14px; line-height: 1; }
+}
+
+.audit li { padding: 10px 14px; display: grid; gap: 2px; }
+.audit time { color: var(--hint); font-size: 12px; }
+
+.empty { text-align: center; padding: 28px 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  input[role="switch"], input[role="switch"]::after { transition: none; }
+}

@@ -22,6 +22,29 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		d.IDHandler,
 	)
 
+	if d.miniAppURL != "" {
+		d.log.Debugf("Register /app handler")
+		d.telegramBot.RegisterHandler(
+			ctx,
+			func(update *guard.Update) bool {
+				return update.Message != nil && strings.HasPrefix(update.Message.Text, "/app")
+			},
+			d.AppHandler,
+		)
+	}
+
+	d.log.Debugf("Register membership and join request handlers")
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool { return update.MyChatMember != nil },
+		d.BotMembershipHandler,
+	)
+	d.telegramBot.RegisterHandler(
+		ctx,
+		func(update *guard.Update) bool { return update.JoinRequest != nil },
+		d.JoinRequestHandler,
+	)
+
 	d.log.Debugf("Register /retry handler")
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -45,7 +68,8 @@ func (d *Domain) setupCommands(ctx context.Context) {
 		func(update *guard.Update) bool {
 			if update.Message != nil &&
 				(strings.HasPrefix(update.Message.Text, "/start") ||
-					strings.HasPrefix(update.Message.Text, "/help")) {
+					strings.HasPrefix(update.Message.Text, "/help")) &&
+				!isStartAdd(update) {
 
 				return true
 			}
@@ -131,7 +155,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.SettingsHandler,
+		d.requireAuth(d.requireLinkedChannel(d.SettingsHandler)),
 	)
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -143,7 +167,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.SettingsChannelHandler,
+		d.requireAuth(d.requireLinkedChannel(d.SettingsChannelHandler)),
 	)
 
 	d.log.Debugf("Register /setflag handler")
@@ -157,7 +181,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.ToggleFlagHandler,
+		d.requireAuth(d.requireLinkedChannel(d.ToggleFlagHandler)),
 	)
 
 	d.log.Debugf("Register /users handlers")
@@ -171,7 +195,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.UsersHandler,
+		d.requireAuth(d.requireLinkedChannel(d.UsersHandler)),
 	)
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -183,7 +207,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.UsersHandler,
+		d.requireAuth(d.requireLinkedChannel(d.UsersHandler)),
 	)
 
 	d.log.Debugf("Register /remove handlers")
@@ -197,7 +221,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.RemoveChannelHandler,
+		d.requireAuth(d.requireLinkedChannel(d.RemoveChannelHandler)),
 	)
 	d.telegramBot.RegisterHandler(
 		ctx,
@@ -209,7 +233,7 @@ func (d *Domain) setupCommands(ctx context.Context) {
 			}
 			return false
 		},
-		d.RemoveConfirmHandler,
+		d.requireAuth(d.requireLinkedChannel(d.RemoveConfirmHandler)),
 	)
 
 	if d.defaultCleanProcessor != nil && d.defaultAccessChecker != nil {
@@ -224,7 +248,12 @@ func (d *Domain) setupCommands(ctx context.Context) {
 				}
 				return false
 			},
-			d.requireAuth(d.AddChannelHandler),
+			d.requireAuthOrPrivateEmployee(d.AddChannelHandler),
+		)
+		d.telegramBot.RegisterHandler(
+			ctx,
+			isStartAdd,
+			d.requireAuthOrPrivateEmployee(d.AddChannelHandler),
 		)
 		d.telegramBot.RegisterHandler(
 			ctx,
@@ -234,7 +263,10 @@ func (d *Domain) setupCommands(ctx context.Context) {
 				}
 				return false
 			},
-			d.AddChannelCallbackHandler,
+			// Reply keyboards are visible to every member of a group, so the
+			// share itself must be authorized too, not only the /add that
+			// produced the button.
+			d.requireAuthOrPrivateEmployee(d.AddChannelCallbackHandler),
 		)
 	}
 
@@ -288,4 +320,12 @@ func (d *Domain) requireAdmin(
 		}
 		handler(ctx, update)
 	}
+}
+
+// isStartAdd matches "/start add", the deep link the Mini App uses to open
+// the /add chat picker in the bot's private chat.
+func isStartAdd(update *guard.Update) bool {
+	return update.Message != nil &&
+		update.Message.ChatType == guard.ChatTypePrivate &&
+		strings.TrimSpace(update.Message.Text) == "/start "+startPayloadAdd
 }

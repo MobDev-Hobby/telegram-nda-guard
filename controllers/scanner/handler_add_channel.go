@@ -3,8 +3,10 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/audit"
 )
 
 func (d *Domain) AddChannelHandler(
@@ -14,27 +16,36 @@ func (d *Domain) AddChannelHandler(
 
 	d.log.Debugf("Chat add request got from chat: %d, user: %s", update.Message.ChatID, update.Message.User.Username)
 
-	// Use a 32-bit request id for the Telegram request_chat button. The
-	// previous int32 cast of (ChatID*1000 + Nanos) overflowed for any
-	// realistic chat id, causing collisions in the pending-request map.
-	requestId := d.nextAddChannelRequestID()
+	// Telegram's request_chat picker shows either groups or channels, never
+	// both, so offer one button per kind. Each gets its own request id; both
+	// resolve to the chat the /add came from.
+	groupRequestID := d.nextAddChannelRequestID()
+	channelRequestID := d.nextAddChannelRequestID()
 	d.channelsMutex.Lock()
-	d.addChannelHandlers[int(requestId)] = update.Message.ChatID
+	d.addChannelHandlers[int(groupRequestID)] = update.Message.ChatID
+	d.addChannelHandlers[int(channelRequestID)] = update.Message.ChatID
 	d.channelsMutex.Unlock()
 
-	requestChannel := true
+	requestChat := true
 	err := d.telegramBot.SendMessage(
 		ctx,
 		&guard.Message{
 			ChatID:   update.Message.ChatID,
 			ThreadID: update.Message.ThreadID,
-			Text:     "Press button to add protected channel",
+			Text: "Choose what to protect. The bot will be added as an administrator " +
+				"with the right to ban users.",
 			Buttons: [][]guard.Button{
 				{
 					{
-						Text:           "Select channel",
-						ID:             requestId,
-						RequestChannel: &requestChannel,
+						Text:                 "Add channel",
+						ID:                   channelRequestID,
+						RequestChannel:       &requestChat,
+						RequestChatIsChannel: true,
+					},
+					{
+						Text:           "Add group",
+						ID:             groupRequestID,
+						RequestChannel: &requestChat,
 					},
 				},
 			},
@@ -98,6 +109,11 @@ func (d *Domain) AddChannelCallbackHandler(
 		AutoScan:          true,
 		AllowClean:        true,
 	}
+	if update.Message.ChatType == guard.ChatTypePrivate {
+		// Added from a private chat: the user administers the chat (the
+		// picker guarantees it) and manages it from the Mini App.
+		protectedChannel.Managers = []int64{update.Message.User.ID}
+	}
 	err := d.AddDefaultProtectedChannel(
 		protectedChannel,
 	)
@@ -112,9 +128,17 @@ func (d *Domain) AddChannelCallbackHandler(
 		d.log.Errorf("can't check rights: %v", err)
 	}
 
+	if pc, ok := d.getProtectedChannel(update.Message.ChatShared.ChatID); ok {
+		d.NoteUserName(update.Message.User.ID, strings.TrimSpace(update.Message.User.FirstName+" "+update.Message.User.LastName))
+		d.recordAudit(ctx, pc, audit.Event{
+			ActorID: update.Message.User.ID, Action: audit.ActionChannelAdded,
+			Details: map[string]any{"controlChat": update.Message.ChatID},
+		}, "")
+	}
+
 	d.log.Infof("Added protected channel: %d with admin chat: %d/%s", update.Message.ChatShared.ChatID, update.Message.ChatID, update.Message.User.Username)
 
-	chanInfo := d.channels[update.Message.ChatShared.ChatID]
+	chanInfo, _ := d.getChannel(update.Message.ChatShared.ChatID)
 
 	var buttons []guard.InlineButton
 
@@ -157,7 +181,8 @@ func (d *Domain) AddChannelCallbackHandler(
 			ChatID:   update.Message.ChatID,
 			ThreadID: update.Message.ThreadID,
 			Text: fmt.Sprintf(
-				"Channel <b>%s</b> added! \nCheck permissions:\n • Scan - %t\n • Clean - %t",
+				"%s <b>%s</b> added! \nCheck permissions:\n • Scan - %t\n • Clean - %t",
+				capitalize(guard.ChatTypeNoun(chanInfo.chatType)),
 				chanInfo.title,
 				chanInfo.CanScan(),
 				chanInfo.CanClean() && protectedChannel.AllowClean,
@@ -170,4 +195,11 @@ func (d *Domain) AddChannelCallbackHandler(
 		d.log.Errorf("can't send message: %s", err)
 		return
 	}
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

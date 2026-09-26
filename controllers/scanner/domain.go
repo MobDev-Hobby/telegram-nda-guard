@@ -6,6 +6,11 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/joinrequests"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/knownchats"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/whitelist"
 )
 
 type Domain struct {
@@ -46,6 +51,35 @@ type Domain struct {
 	tickerCasesMutex    sync.Mutex
 	tickerCases         []reflect.SelectCase
 	tickerCasesChannels []int64
+
+	// Mini App support: manual kicks go through userKicker, scans are kept
+	// in memory so a kick can only target users a scan actually returned.
+	userKicker          UserKicker
+	defaultCleanOptions processors.CleanOptions
+	miniAppURL          string
+	miniAppShortName    string
+	scansMutex          sync.Mutex
+	scans               map[string]*scanJob
+
+	whitelistStorage      WhitelistStorage
+	whitelistTTL          time.Duration
+	whitelistRemindBefore time.Duration
+	whitelistMutex        sync.Mutex
+	whitelists            map[int64]map[int64]whitelist.Entry
+	auditStorage          AuditStorage
+	namesMutex            sync.Mutex
+	userNames             map[int64]string
+
+	knownChatStorage KnownChatStorage
+	knownMutex       sync.Mutex
+	knownChats       map[int64]knownchats.Chat
+
+	joinRequestStorage JoinRequestStorage
+	joinMutex          sync.Mutex
+	joinRequests       map[int64]map[int64]joinrequests.Request
+
+	// now is replaceable in tests.
+	now func() time.Time
 
 	// ready is closed once Run() finishes initialization, so HTTP/management
 	// surfaces can wait for (or poll) readiness before serving traffic.
@@ -91,6 +125,15 @@ func New(
 
 		processRequestChan: make(chan ScanRequest, 10),
 		ready:              make(chan struct{}),
+		scans:              make(map[string]*scanJob),
+
+		whitelistTTL:          DefaultWhitelistTTL,
+		whitelistRemindBefore: DefaultWhitelistRemindBefore,
+		whitelists:            make(map[int64]map[int64]whitelist.Entry),
+		now:                   time.Now,
+		userNames:             make(map[int64]string),
+		knownChats:            make(map[int64]knownchats.Chat),
+		joinRequests:          make(map[int64]map[int64]joinrequests.Request),
 	}
 
 	for _, opt := range opts {

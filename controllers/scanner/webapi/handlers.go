@@ -89,17 +89,32 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChannelByPath routes sub-paths of /api/channels/{id}:
-//   GET    /api/channels/{id}           -> get channel
-//   PATCH  /api/channels/{id}/flags     -> set flags
-//   DELETE /api/channels/{id}           -> remove (?chat= required)
-//   GET    /api/channels/{id}/users     -> list members
-//   POST   /api/channels/{id}/scan      -> trigger scan (?chat= required)
-//   POST   /api/channels/{id}/clean     -> trigger clean (?chat= required)
+//
+//	GET    /api/channels/{id}           -> get channel
+//	PATCH  /api/channels/{id}/flags     -> set flags
+//	DELETE /api/channels/{id}           -> remove (?chat= required)
+//	GET    /api/channels/{id}/users     -> list members
+//	POST   /api/channels/{id}/scan      -> trigger scan (?chat= required)
+//	POST   /api/channels/{id}/clean     -> trigger clean (?chat= required)
 func (s *Server) handleChannelByPath(w http.ResponseWriter, r *http.Request) {
 	id, sub, ok := parsePathID(r.URL.Path, "/api/channels/")
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid channel id")
 		return
+	}
+	// requireAuth authorized the caller for the ?chat= scope. Without this
+	// check that scope was unrelated to the channel, so an admin of any chat
+	// could act on every channel by passing their own chat.
+	if chat := scopeChatIDFrom(r); chat != 0 {
+		ch, err := s.service.GetChannel(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if !containsID(ch.CommandChats, chat) {
+			writeError(w, http.StatusForbidden, "channel is not controlled from this chat")
+			return
+		}
 	}
 	switch sub {
 	case "":
@@ -208,10 +223,19 @@ func (s *Server) handleRefreshRights(w http.ResponseWriter, r *http.Request) {
 
 // decodeJSON decodes a JSON request body into dst with a sane size limit.
 func decodeJSON(r *http.Request, dst any) error {
-	defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 	r.Body = http.MaxBytesReader(nil, r.Body, 1<<16) // 64 KiB
 	return json.NewDecoder(r.Body).Decode(dst)
 }
 
 // _ keeps strconv referenced for potential numeric query parsing extensions.
 var _ = strconv.Atoi
+
+func containsID(ids []int64, id int64) bool {
+	for _, v := range ids {
+		if v == id {
+			return true
+		}
+	}
+	return false
+}

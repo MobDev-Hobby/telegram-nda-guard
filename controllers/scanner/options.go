@@ -1,6 +1,10 @@
 package scanner
 
-import "time"
+import (
+	"time"
+
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+)
 
 type ProcessorOption func(*Domain)
 
@@ -135,5 +139,86 @@ func WithAuthorizer(authorizer Authorizer) func(*Domain) {
 	}
 	return func(d *Domain) {
 		d.authorizer = authorizer
+	}
+}
+
+// WithUserKicker enables manual kicks from the Mini App. The bundled
+// processors/kicker.Domain implements UserKicker; wire the same instance that
+// serves as the default clean processor so both paths share rate limiting.
+func WithUserKicker(kicker UserKicker) func(*Domain) {
+	return func(d *Domain) {
+		d.userKicker = kicker
+	}
+}
+
+// WithDefaultCleanOptions tells the controller which clean options apply to
+// channels without their own. It is used to display settings; keep it equal
+// to the defaults the clean processor was built with.
+func WithDefaultCleanOptions(opts processors.CleanOptions) func(*Domain) {
+	return func(d *Domain) {
+		d.defaultCleanOptions = opts
+	}
+}
+
+// WithMiniApp enables the /app command and the bot menu button. url is the
+// HTTPS address of the Mini App page. shortName is the Mini App short name
+// registered in BotFather; it is needed to open the app from groups, where
+// Telegram only allows t.me/<bot>/<shortName> links.
+func WithMiniApp(url, shortName string) func(*Domain) {
+	return func(d *Domain) {
+		d.miniAppURL = url
+		d.miniAppShortName = shortName
+	}
+}
+
+// WithWhitelistStorage enables per-channel whitelists: channel administrators
+// approve users from the Mini App, approved users skip the access check until
+// the approval expires (WithWhitelistTTL, 30 days by default) and must then be
+// re-approved.
+func WithWhitelistStorage(storage WhitelistStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.whitelistStorage = storage
+	}
+}
+
+// WithWhitelistTTL sets how long a whitelist approval lasts.
+func WithWhitelistTTL(ttl time.Duration) func(*Domain) {
+	if ttl <= 0 {
+		panic("whitelist ttl must be positive")
+	}
+	return func(d *Domain) {
+		d.whitelistTTL = ttl
+	}
+}
+
+// WithWhitelistRemindBefore sets how early control chats are reminded that an
+// approval is running out.
+func WithWhitelistRemindBefore(before time.Duration) func(*Domain) {
+	return func(d *Domain) {
+		d.whitelistRemindBefore = before
+	}
+}
+
+// WithAuditStorage keeps a per-channel action log (scans, kicks, whitelist and
+// settings changes, joins), shown in the Mini App.
+func WithAuditStorage(storage AuditStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.auditStorage = storage
+	}
+}
+
+// WithKnownChatStorage remembers chats where the bot was made an
+// administrator, so the Mini App can offer to protect them.
+func WithKnownChatStorage(storage KnownChatStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.knownChatStorage = storage
+	}
+}
+
+// WithJoinRequestStorage enables the join request manager for chats that
+// approve new members.
+func WithJoinRequestStorage(storage JoinRequestStorage) func(*Domain) {
+	return func(d *Domain) {
+		d.joinRequestStorage = storage
 	}
 }

@@ -28,13 +28,21 @@ func (d *Domain) Run(
 				AutoScan:          protectedChannel.AutoScan,
 				AutoClean:         protectedChannel.AutoClean,
 				AllowClean:        protectedChannel.AllowClean,
+				CleanOptions:      protectedChannel.CleanOptions,
+				Managers:          protectedChannel.Managers,
+				LastCheck:         protectedChannel.LastCheck,
+				JoinRequestMode:   protectedChannel.JoinRequestMode,
 			}
 			protectedChannel.CleanReportProcessor = d.defaultCleanProcessor
 			protectedChannel.ScanReportProcessor = d.defaultScanProcessor
 			protectedChannel.AccessChecker = d.defaultAccessChecker
-			d.AddDefaultProtectedChannel(&protectedChannel)
+			if err := d.AddDefaultProtectedChannel(&protectedChannel); err != nil {
+				d.log.Errorf("can't restore protected channel %d: %s", protectedChannel.ID, err)
+			}
 		}
 	}
+
+	d.loadKnownChats(ctx)
 
 	d.log.Debugf("Run telegram bot")
 	err := d.telegramBot.Run(ctx)
@@ -49,6 +57,7 @@ func (d *Domain) Run(
 
 	d.log.Debugf("Setup telegram bot handlers")
 	d.setupCommands(ctx)
+	d.setupMiniAppMenu(ctx)
 	d.log.Debugf("Telegram bot handlers registered")
 
 	d.log.Debugf("Setup access levels for bot and userbots")
@@ -62,6 +71,8 @@ func (d *Domain) Run(
 
 	d.log.Debugf("Setup user checker loop")
 	d.RunUserAccessChecker(ctx)
+	d.RunWhitelistReminders(ctx)
+	d.RunJoinRequestRechecks(ctx)
 
 	d.log.Infof("Initialization completed, now bot is ready to go")
 	d.notifySuccessRun(ctx)
@@ -97,8 +108,8 @@ func (d *Domain) notifySuccessRun(ctx context.Context) {
 					fmt.Sprintf(
 						"\n• <b>%s</b>\n \t • Auto scan: <b>%t</b>\n \t • Auto clean: <b>%t</b>\n \t • Manual clean: <b>%t</b>\n",
 						title,
-						protectedChannel.AutoClean,
 						protectedChannel.AutoScan,
+						protectedChannel.AutoClean,
 						protectedChannel.AllowClean,
 					),
 				)

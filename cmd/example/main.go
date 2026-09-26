@@ -21,10 +21,14 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner/webapi"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/kicker"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/reporter"
+	redisaudit "github.com/MobDev-Hobby/telegram-nda-guard/storage/audit/redis"
 	redischanstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/channels/redis"
 	goredisadapter "github.com/MobDev-Hobby/telegram-nda-guard/storage/drivers/go-redis"
+	redisjoinrequests "github.com/MobDev-Hobby/telegram-nda-guard/storage/joinrequests/redis"
+	redisknownchats "github.com/MobDev-Hobby/telegram-nda-guard/storage/knownchats/redis"
 	filestorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/file"
 	redisstorage "github.com/MobDev-Hobby/telegram-nda-guard/storage/session/redis"
+	rediswhitelist "github.com/MobDev-Hobby/telegram-nda-guard/storage/whitelist/redis"
 	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/bots/bot"
 	"github.com/MobDev-Hobby/telegram-nda-guard/telegram/sender/ratelimited"
 	cacheduserbot "github.com/MobDev-Hobby/telegram-nda-guard/telegram/userbots/cached"
@@ -219,6 +223,15 @@ func main() {
 		scanner.WithDefaultScanProcessor(scanReporter),
 		scanner.WithDefaultCleanProcessor(cleanReporter),
 		scanner.WithDefaultAccessChecker(cachedAccessChecker),
+		// Mini App kicks go through the same rate-limited kicker as /clean.
+		scanner.WithUserKicker(cleanReporter),
+		scanner.WithDefaultCleanOptions(cleanReporter.DefaultCleanOptions()),
+	}
+	if options.MiniAppURL != "" {
+		if options.WebAddr == "" {
+			logger.Panicf("MINIAPP_URL needs WEB_ADDR: the Mini App is served by the web API")
+		}
+		controllerOptions = append(controllerOptions, scanner.WithMiniApp(options.MiniAppURL, options.MiniAppShortName))
 	}
 
 	// Authorization: when requested, restrict commands to the owner and to the
@@ -242,7 +255,16 @@ func main() {
 		if err != nil {
 			logger.Panicf("can't init storage: %s", err)
 		}
-		controllerOptions = append(controllerOptions, scanner.WithStorage(storage))
+		controllerOptions = append(
+			controllerOptions,
+			scanner.WithStorage(storage),
+			// Per-channel whitelists, managed from the Mini App; approvals
+			// expire after 30 days unless re-approved.
+			scanner.WithWhitelistStorage(rediswhitelist.New(redisClient)),
+			scanner.WithAuditStorage(redisaudit.New(redisClient)),
+			scanner.WithKnownChatStorage(redisknownchats.New(redisClient)),
+			scanner.WithJoinRequestStorage(redisjoinrequests.New(redisClient)),
+		)
 	}
 
 	ProtectorControllerDomain := scanner.New(
@@ -263,12 +285,18 @@ func main() {
 		if len(webSecret) < 32 {
 			logger.Panicf("WEB_SESSION_SECRET must be at least 32 bytes when WEB_ADDR is set")
 		}
+		webOptions := []webapi.Option{webapi.WithLogger(logger.Named("webapi"))}
+		if options.MiniAppURL != "" {
+			// The Mini App lets every channel administrator manage the
+			// channels they administer; the owner manages all of them.
+			webOptions = append(webOptions, webapi.WithMiniApp(ProtectorControllerDomain, webAuth))
+		}
 		webServer, err := webapi.New(
 			ProtectorControllerDomain,
 			webAuth,
 			options.TelegramBotKey,
 			webSecret,
-			webapi.WithLogger(logger.Named("webapi")),
+			webOptions...,
 		)
 		if err != nil {
 			logger.Panicf("can't init web api: %s", err)

@@ -21,22 +21,33 @@ func (d *Domain) ProcessReport(
 	messages := make([]string, 0, 1)
 	message := strings.Builder{}
 
-	_, err := message.WriteString(
-		fmt.Sprintf(
-			"<b>Scan report for %s %s</b>"+
-				"\n\n<b>Users:</b>"+
-				"\n• Good: <b>%d</b>"+
-				"\n• Unknown: <b>%d</b>"+
-				"\n• Bad: <b>%d</b>\n",
-			guard.ChatTypeNoun(report.Channel.Type),
-			report.Channel.Title,
-			len(report.AllowedUsers),
-			len(report.UnknownUsers),
-			len(report.DeniedUsers),
-		),
+		_, err := fmt.Fprintf(
+		&message,
+		"<b>Scan report for %s %s</b>"+
+			"\n\n<b>Users:</b>"+
+			"\n• Good: <b>%d</b>"+
+			"\n• Unknown: <b>%d</b>"+
+			"\n• Bad: <b>%d</b>\n",
+		guard.ChatTypeNoun(report.Channel.Type),
+		report.Channel.Title,
+		len(report.AllowedUsers),
+		len(report.UnknownUsers),
+		len(report.DeniedUsers),
 	)
 	if err != nil {
 		d.log.Errorf("ProcessReport write message failed: %v", err)
+	}
+
+	if report.Stats.Partial() {
+				_, err := fmt.Fprintf(
+			&message,
+			"\n⚠️ Telegram returned only <b>%d of %d</b> members, the rest were not checked.\n",
+			report.Stats.Fetched,
+			report.Stats.Total,
+		)
+		if err != nil {
+			d.log.Errorf("ProcessReport write message failed: %v", err)
+		}
 	}
 
 	for _, reportChunk := range []struct {

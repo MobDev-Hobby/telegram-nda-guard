@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/storage/audit"
 	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 )
 
@@ -53,32 +55,45 @@ func (d *Domain) CheckPermissions(_ context.Context, request ScanRequest) error 
 }
 
 func (d *Domain) CheckChannelsLoop(ctx context.Context) {
-	for range make([]any, d.processingThreads) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case request, ok := <-d.processRequestChan:
-				if !ok {
-					return
-				}
+	// Each worker needs its own goroutine. The loop used to run the workers
+	// one after another inside the caller's goroutine, and since a worker never
+	// returns before ctx is done, only the first one ever ran.
+	var wg sync.WaitGroup
+	for range d.processingThreads {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d.checkChannelsWorker(ctx)
+		}()
+	}
+	wg.Wait()
+}
 
-				// Bot is not ready
-				if err := d.CheckPermissions(ctx, request); err != nil {
-					for _, commandChannelID := range request.channelInfo.commandChannelIDs {
-						_ = d.telegramBot.SendMessage(
-							ctx,
-							&guard.Message{
-								ChatID: commandChannelID,
-								Text:   fmt.Sprintf("Skip channel scan due error: %s", err.Error()),
-							},
-						)
-					}
-					continue
-				}
-				d.ProcessRequest(ctx, request)
-				<-time.After(d.taskDelayInterval)
+func (d *Domain) checkChannelsWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case request, ok := <-d.processRequestChan:
+			if !ok {
+				return
 			}
+
+			// Bot is not ready
+			if err := d.CheckPermissions(ctx, request); err != nil {
+				for _, commandChannelID := range request.channelInfo.commandChannelIDs {
+					_ = d.telegramBot.SendMessage(
+						ctx,
+						&guard.Message{
+							ChatID: commandChannelID,
+							Text:   fmt.Sprintf("Skip channel scan due error: %s", err.Error()),
+						},
+					)
+				}
+				continue
+			}
+			d.ProcessRequest(ctx, request)
+			<-time.After(d.taskDelayInterval)
 		}
 	}
 }
@@ -113,18 +128,20 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		report.Channel.MigratedTo = utils.Ptr(request.channelInfo.id)
 	}
 
+	protectedChannel, ok := d.getProtectedChannel(request.channelInfo.id)
+	if !ok {
+		d.log.Errorf("protected channel for channel %d not found", request.channelInfo.id)
+		return
+	}
+	report.CleanOptions = protectedChannel.CleanOptions
+	report.Stats = d.channelStats(request.channelInfo.id, len(users))
 	if request.reportChannels != nil {
 		report.ReportChannels = *request.reportChannels
 	} else {
-		protectedChannel, ok := d.getProtectedChannel(request.channelInfo.id)
-		if !ok {
-			d.log.Errorf("protected channel for channel %d not found", request.channelInfo.id)
-			return
-		}
 		report.ReportChannels = protectedChannel.CommandChannelIDs
 	}
 
-	checker := request.accessChecker
+	checker := d.withWhitelist(request.channelInfo.id, request.accessChecker)
 	if checker == nil {
 		d.log.Infof("No access checker specified, skip")
 		return
@@ -163,6 +180,7 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		}
 		report.DeniedUsers = append(report.DeniedUsers, userReport)
 	}
+	d.recordRequestCheck(ctx, protectedChannel, request.requestType, report)
 	request.reportProcessor.ProcessReport(ctx, report)
 	d.log.Debugf("done check for channel [%d]%s", request.channelInfo.id, request.channelInfo.title)
 }
@@ -249,4 +267,50 @@ func (d *Domain) enqueueScanRequest(ctx context.Context, request ScanRequest) {
 	default:
 		d.log.Warnf("scan queue full, dropping %v request for channel %d", request.requestType, request.channelInfo.id)
 	}
+}
+
+// channelStats returns how complete the last member listing of channelID was,
+// when the userbot can tell; otherwise it assumes the list was complete.
+func (d *Domain) channelStats(channelID int64, fetched int) guard.ScanStats {
+	if provider, ok := d.userBot.(interface {
+		ChannelStats(channelID int64) (guard.ScanStats, bool)
+	}); ok {
+		if stats, found := provider.ChannelStats(channelID); found {
+			return stats
+		}
+	}
+	return guard.ScanStats{Fetched: fetched, Total: fetched}
+}
+
+// recordRequestCheck feeds a bot-side scan/clean into the health indicator
+// and the action log.
+func (d *Domain) recordRequestCheck(ctx context.Context, pc ProtectedChannel, requestType ScanRequestType, report processors.AccessReport) {
+	summary := processors.CheckSummary{
+		At:      d.now(),
+		Bad:     len(report.DeniedUsers),
+		Unknown: len(report.UnknownUsers),
+		Partial: report.Stats.Partial(),
+	}
+	for _, u := range report.AllowedUsers {
+		if _, ok := d.whitelistEntry(ctx, pc.ID, u.ID); ok {
+			summary.Whitelisted++
+		} else {
+			summary.Good++
+		}
+	}
+	d.recordCheck(ctx, pc.ID, summary)
+
+	action := audit.ActionScanCompleted
+	if requestType == Clean || requestType == AutoClean {
+		action = audit.ActionCleanCompleted
+	}
+	source := "manual"
+	if requestType == AutoScan || requestType == AutoClean {
+		source = "schedule"
+	}
+	d.recordAudit(ctx, pc, audit.Event{
+		Action:  action,
+		Counts:  summaryCounts(summary),
+		Details: map[string]any{"source": source, "partial": summary.Partial},
+	}, "")
 }

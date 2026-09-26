@@ -7,7 +7,6 @@ import (
 	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
-	"github.com/MobDev-Hobby/telegram-nda-guard/storage/channels"
 )
 
 // ToggleFlagHandler flips one of the AutoScan/AutoClean/AllowClean flags for a
@@ -71,13 +70,7 @@ func (d *Domain) applyFlagToggle(ctx context.Context, channelID int64, flag stri
 	if d.storage != nil {
 		storeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		err := d.storage.Store(storeCtx, &channels.ProtectedChannel{
-			ID:                protectedChannel.ID,
-			CommandChannelIDs: protectedChannel.CommandChannelIDs,
-			AutoScan:          protectedChannel.AutoScan,
-			AutoClean:         protectedChannel.AutoClean,
-			AllowClean:        protectedChannel.AllowClean,
-		})
+		err := d.storage.Store(storeCtx, storageRecord(protectedChannel))
 		if err != nil {
 			d.channelsMutex.Unlock()
 			return fmt.Errorf("persist channel: %w", err)
@@ -113,8 +106,8 @@ func parseSetFlagPayload(data string) (channelID int64, flag string, ok bool) {
 	if len(parts) < 3 || parts[0] != "/setflag" {
 		return 0, "", false
 	}
-	id, err := parseChannelArg(data)
-	if err != true {
+	id, ok := parseChannelArg(data)
+	if !ok {
 		return 0, "", false
 	}
 	return id, parts[2], true

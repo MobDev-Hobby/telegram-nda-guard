@@ -42,9 +42,16 @@ func castUpdate(update *models.Update) *guard.Update {
 	}
 
 	if update.CallbackQuery != nil {
+		from := update.CallbackQuery.From
 		matchUpdate.CallbackQuery = &guard.CallbackQuery{
 			ID:   update.CallbackQuery.ID,
 			Data: update.CallbackQuery.Data,
+			From: guard.User{
+				ID:        from.ID,
+				Username:  from.Username,
+				FirstName: from.FirstName,
+				LastName:  from.LastName,
+			},
 		}
 
 		if update.CallbackQuery.Message.Message != nil {
@@ -52,7 +59,33 @@ func castUpdate(update *models.Update) *guard.Update {
 		}
 	}
 
+	if m := update.MyChatMember; m != nil {
+		membership := &guard.BotMembership{
+			Chat:   guard.ChannelInfo{ID: m.Chat.ID, Title: m.Chat.Title, Type: string(m.Chat.Type)},
+			From:   castUser(m.From),
+			Status: string(m.NewChatMember.Type),
+		}
+		if a := m.NewChatMember.Administrator; a != nil {
+			membership.CanRestrictMembers = a.CanRestrictMembers
+			membership.CanInviteUsers = a.CanInviteUsers
+		}
+		matchUpdate.MyChatMember = membership
+	}
+
+	if r := update.ChatJoinRequest; r != nil {
+		matchUpdate.JoinRequest = &guard.JoinRequest{
+			Chat: guard.ChannelInfo{ID: r.Chat.ID, Title: r.Chat.Title, Type: string(r.Chat.Type)},
+			User: castUser(r.From),
+			At:   int64(r.Date),
+			Bio:  r.Bio,
+		}
+	}
+
 	return matchUpdate
+}
+
+func castUser(u models.User) guard.User {
+	return guard.User{ID: u.ID, Username: u.Username, FirstName: u.FirstName, LastName: u.LastName}
 }
 func (d *Domain) RegisterHandler(
 	_ context.Context,
@@ -75,11 +108,15 @@ func (d *Domain) ClearHandler(id string) {
 }
 
 func (d *Domain) CallbackResponse(ctx context.Context, response guard.CallbackResponse) {
-	d.botClient.AnswerCallbackQuery(
+	// An unanswered callback only leaves a spinner on the button; log and go on.
+	_, err := d.botClient.AnswerCallbackQuery(
 		ctx,
 		&bot.AnswerCallbackQueryParams{
 			CallbackQueryID: response.ID,
 			Text:            response.Text,
 			ShowAlert:       response.ShowAlert,
 		})
+	if err != nil {
+		d.log.Warnf("can't answer callback query: %s", err)
+	}
 }

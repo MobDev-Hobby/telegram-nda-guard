@@ -17,7 +17,17 @@ import (
 // sessionPayload is the on-the-wire form of the session cookie: callerID plus a
 // 64-bit expiry (unix seconds). It is MAC'd with sessionSecret so it cannot be
 // forged or tampered with. Layout: [8 bytes callerID][8 bytes expiry][32 bytes hmac].
-const sessionLen = 8 + 8 + 32
+// Session token: caller id (8) | expiry (8) | kind (1) | HMAC of the rest (32).
+const sessionLen = 8 + 8 + 1 + 32
+
+// sessionKind is signed into the token so a dashboard cookie can't be used
+// as a Mini App session and vice versa.
+type sessionKind byte
+
+const (
+	sessionDashboard sessionKind = 1
+	sessionMiniApp   sessionKind = 2
+)
 
 type contextKey string
 
@@ -86,18 +96,29 @@ func (s *Server) verifyTelegramLogin(values map[string]string, maxAge time.Durat
 	return uid, nil
 }
 
-// issueSession builds and sets a signed session cookie for callerID.
-func (s *Server) issueSession(w http.ResponseWriter, callerID int64) {
+// newSessionToken builds a signed dashboard session token for callerID.
+func (s *Server) newSessionToken(callerID int64) string {
+	return s.newSessionTokenTTL(callerID, s.cookieTTL, sessionDashboard)
+}
+
+// newSessionTokenTTL builds a signed session token of the given kind valid
+// for ttl.
+func (s *Server) newSessionTokenTTL(callerID int64, ttl time.Duration, kind sessionKind) string {
 	payload := make([]byte, sessionLen)
 	binary.BigEndian.PutUint64(payload[0:8], uint64(callerID))
-	binary.BigEndian.PutUint64(payload[8:16], uint64(time.Now().Add(s.cookieTTL).Unix()))
+	binary.BigEndian.PutUint64(payload[8:16], uint64(time.Now().Add(ttl).Unix()))
+	payload[16] = byte(kind)
 	mac := hmac.New(sha256.New, s.sessionSecret)
-	mac.Write(payload[0:16])
-	copy(payload[16:], mac.Sum(nil))
+	mac.Write(payload[0:17])
+	copy(payload[17:], mac.Sum(nil))
+	return hex.EncodeToString(payload)
+}
 
+// issueSession builds and sets a signed session cookie for callerID.
+func (s *Server) issueSession(w http.ResponseWriter, callerID int64) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     s.cookieName,
-		Value:    hex.EncodeToString(payload),
+		Value:    s.newSessionToken(callerID),
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -106,20 +127,34 @@ func (s *Server) issueSession(w http.ResponseWriter, callerID int64) {
 	})
 }
 
-// validateSession parses and verifies the session cookie, returning the caller
-// ID and whether the session is still valid.
+// validateSession verifies the dashboard session cookie. It returns the
+// caller ID and whether the session is still valid.
 func (s *Server) validateSession(r *http.Request) (int64, bool) {
 	c, err := r.Cookie(s.cookieName)
 	if err != nil {
 		return 0, false
 	}
-	raw, err := hex.DecodeString(c.Value)
+	return s.validateSessionToken(c.Value, sessionDashboard)
+}
+
+// validateMiniAppSession verifies the Mini App token from the Authorization
+// header ("Bearer <token>"; the webview may drop cookies).
+func (s *Server) validateMiniAppSession(r *http.Request) (int64, bool) {
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		return 0, false
+	}
+	return s.validateSessionToken(strings.TrimPrefix(auth, "Bearer "), sessionMiniApp)
+}
+
+func (s *Server) validateSessionToken(token string, kind sessionKind) (int64, bool) {
+	raw, err := hex.DecodeString(token)
 	if err != nil || len(raw) != sessionLen {
 		return 0, false
 	}
 	mac := hmac.New(sha256.New, s.sessionSecret)
-	mac.Write(raw[0:16])
-	if !hmac.Equal(raw[16:], mac.Sum(nil)) {
+	mac.Write(raw[0:17])
+	if !hmac.Equal(raw[17:], mac.Sum(nil)) || sessionKind(raw[16]) != kind {
 		return 0, false
 	}
 	expiry := int64(binary.BigEndian.Uint64(raw[8:16]))
@@ -129,11 +164,17 @@ func (s *Server) validateSession(r *http.Request) (int64, bool) {
 	return int64(binary.BigEndian.Uint64(raw[0:8])), true
 }
 
-// clearSession removes the session cookie.
-func (s *Server) clearSession(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name: s.cookieName, Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(0, 0),
-	})
+// requireSession wraps a Mini App handler: it needs a Mini App session; the
+// handler performs its own (e.g. per-channel) authorization.
+func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		callerID, ok := s.validateMiniAppSession(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next(w, r.WithContext(context.WithValue(r.Context(), callerIDKey, callerID)))
+	}
 }
 
 // requireAuth wraps a handler: it validates the session cookie and, if present,

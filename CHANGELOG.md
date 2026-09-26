@@ -29,7 +29,195 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ## [Unreleased]
 
-### Added
+## [0.4.0] — 2026-09-25
+
+Both batches below ship in this release.
+
+### Channels, Mini App, per-channel cleanup (September 2026)
+
+#### Added
+
+- **Channels can be added from the bot.** `/add` now offers "Add channel" and
+  "Add group" buttons. The single "Select channel" button used to send
+  `chat_is_channel: false` (go-telegram/bot serialises the field even when
+  false), so Telegram only ever listed groups. New
+  `guard.Button.RequestChatIsChannel` selects the picker kind.
+- **Telegram Mini App.** `webapi.WithMiniApp(service, channelAuth)` serves an
+  embedded Mini App under `/miniapp/` with an API under `/api/miniapp/`:
+  channel administrators see the channels they administer, run a scan with
+  live progress, tick members to remove and change every per-channel setting.
+  Auth is Telegram `initData` (validated with the bot token) exchanged for a
+  Bearer session. New `scanner.MiniAppService` (implemented by `*Domain`),
+  `scanner.ChannelSettings`, `scanner.ScanView`, `scanner.ScannedUser`,
+  `scanner.UserKicker`, options `scanner.WithUserKicker`,
+  `scanner.WithDefaultCleanOptions`, `scanner.WithMiniApp`, the `/app` command
+  and a Mini App menu button. `webapi.Server.Handler()` exposes the handler
+  for mounting into an existing server.
+- **Mini App v2.**
+  - *Employees only:* sign-in runs the default access checker on the Telegram
+    user; failures get `403 {"code":"not_employee"}`. Sessions last 1 hour
+    (`webapi.WithMiniAppSessionTTL`), so the check repeats.
+  - *Managers:* a channel's Telegram admins see it in the app; to manage it
+    they press **Join**, which adds them to `ProtectedChannel.Managers`
+    (persisted). All channel routes need admin + manager (or privileged);
+    managers get reminders in private.
+  - *Connect from the app:* chats where the bot became an admin
+    (`my_chat_member`, `WithKnownChatStorage`) and that aren't protected are
+    offered under **Available to connect**; **Add via bot** opens
+    `t.me/<bot>?start=add`, which runs `/add` in the private chat. In private
+    chats `/add` is allowed for anyone passing the checker — Telegram's picker
+    only lists chats the user administers.
+  - *Health traffic light:* `ChannelView.Health` — red for violations in the
+    last check or no check for 7 days, yellow for never / 3+ days, green
+    otherwise. Every scan (bot, schedule, Mini App), recheck and kick updates
+    `ProtectedChannel.LastCheck`.
+  - *Member traffic light & recheck:* scan statuses `good` / `whitelisted` /
+    `unknown` / `bad` / `kicked`; `POST …/scans/{id}/users/{uid}/recheck`
+    invalidates the checker cache (`checker/cached.Domain.Invalidate`) and
+    asks again, whitelisted users included (their `check` shows the raw
+    verdict).
+  - *Action log:* `WithAuditStorage` (`storage/audit/redis`, capped Redis
+    list, 500 per channel) records adds/joins/settings/scans/cleans/kicks/
+    rechecks/whitelist/join-request events; `GET …/audit`, shown in Settings.
+  - *Join request manager:* `WithJoinRequestStorage`,
+    `ChannelSettings.JoinRequests` = `off` | `auto` | `manual`. Auto approves
+    requesters who pass and leaves the rest pending, rechecking daily; manual
+    keeps them for managers (`…/joins`, `approve`, `decline`, recheck).
+    The Bot API can't list pending requests, so only ones arriving after
+    deploy are seen. Needs the bot's `can_invite_users`.
+- **Per-channel whitelist with periodic re-approval.** `scanner.WithWhitelistStorage`
+  (+ `storage/whitelist` model and `storage/whitelist/redis`). Channel admins
+  add users from a Mini App scan; an active entry makes the user pass every
+  access check in that channel and protects them from Mini App kicks. An
+    approval must be reviewed every `WithWhitelistTTL` (default 30 days); an
+  overdue entry keeps protecting the user and triggers a daily reminder to
+  the control chats and managers until renewed or removed. An optional term
+  (`ttlDays`, 1–365) makes an entry temporary: it is removed at the end of
+  the term. Entries carry the approver's note (≤500 chars). Control chats get
+  a reminder `WithWhitelistRemindBefore` (default 3 days) ahead, a notice on
+  expiry, and an audit message on every add/renew/remove. Mini App: a
+  "Whitelist" tab and "Add to whitelist" in scan results; API
+  `GET|POST /api/miniapp/channels/{id}/whitelist`,
+  `POST …/whitelist/{userId}/renew`, `DELETE …/whitelist/{userId}`.
+  `scanner.MiniAppService` gained `ListWhitelist`, `AddToWhitelist`,
+  `RenewWhitelistEntry`, `RemoveWhitelistEntry`.
+- **Per-channel cleanup settings.** `processors.CleanOptions` (`KeepBanned`,
+  `CleanMessages`, `CleanUnknown`) on `scanner.ProtectedChannel`,
+  `channels.ProtectedChannel` (persisted, omitted when unset) and
+  `processors.AccessReport`; the kicker uses them over its defaults.
+  `kicker.Domain.KickUsers` removes a given list of users and returns
+  `[]processors.KickResult`.
+- **Partial member lists are reported.** `guard.ScanStats` (fetched vs total);
+  the userbot records Telegram's participant `Count`, and scan/clean reports
+  and the Mini App warn when Telegram returned only part of the members.
+- `authorizer.HybridAuthorizer.AuthorizeChannel` / `IsPrivileged` and
+  `WithAdminCacheTTL` (administrator lists are cached for a minute).
+- `guard.InlineButton.URL` / `WebAppURL`, `guard.CallbackQuery.From`.
+
+#### Changed
+
+- Dependencies updated to their latest versions: `go-telegram/bot` 1.8.2 →
+  1.27.0, `gotd/td` 0.110.1 → 0.162.0 (fixes GO-2026-6138), `gotd/contrib`
+  0.25.0, `go-redis/v9` 9.22.0, `caarlos0/env/v11` 11.4.1, `zap` 1.28.0,
+  `testify` 1.12.1, `golang.org/x/{sys,time,crypto,net}` latest (x/crypto
+  fixes GO-2026-6355/6354/6303).
+- go-telegram/bot runs handlers in separate goroutines by default since
+  v1.9; the bot opts out (`WithNotAsyncHandlers`) to keep updates processed
+  one at a time as before.
+
+#### Security
+
+- Inline-button presses were authorized against
+  `CallbackQuery.Message.User` — the author of the message carrying the
+  button, i.e. the bot. With `REQUIRE_ADMIN_AUTH` the bot is an admin of the
+  chat, so any member could run `/scan`, `/clean`, … by pressing a button.
+  Presses are now authorized by `CallbackQuery.From`.
+- `/settings`, `/setflag`, `/users`, `/remove`, `/rmconfirm` and the chat
+  share of `/add` ran without the authorizer, and the ones taking a channel id
+  did not check that the channel is controlled from the current chat: any
+  chat could list the members of, reconfigure or detach any protected channel.
+  They now require authorization and a linked channel.
+- Web dashboard: `?chat=` authorized the caller for that chat but was never
+  matched against the channel, so an admin of any chat could act on every
+  channel. The channel must now be controlled from `?chat=`.
+- Web sessions carry a signed kind: the dashboard accepts only its cookie,
+  the Mini App API only its Bearer token. A dashboard session no longer
+  bypasses the Mini App employee check or its one-hour lifetime.
+
+#### Fixed
+
+- Re-adding an already protected channel (`/add` from another chat) replaced
+  its stored record with defaults (control chats, clean options, managers,
+  last check, join request mode). The new control chat and manager are now
+  merged into the existing record.
+- A join request Telegram no longer has (withdrawn, or the user already
+  joined) was stored again after the failed approval and stayed pending
+  forever. It is now dropped (`scanner.ErrJoinRequestGone`).
+- Mini App kicks re-check the whitelist, so users whitelisted after the scan
+  (from another session) aren't removed from an older scan.
+- The whitelist is loaded from storage outside the shared lock and with a
+  timeout; a slow Redis no longer stalls checks in every channel.
+- `storage/audit/redis`: `ListAudit` with `limit <= 0` returned the whole
+  log; it now returns nothing.
+- Mini App: a late scan poll response no longer replaces a tab the user
+  already switched to.
+
+- Mini App: controls styled with `all: unset` ignored the `hidden`
+  attribute.
+- The kicker skipped the ban when both `KeepBanned` and `CleanMessages` were
+  off and only issued an `OnlyIfBanned` unban — a no-op — while counting the
+  user as kicked. It now always bans first.
+- Scan workers: `WithNProcessingThreads` workers ran one after another in one
+  goroutine, so only the first ever processed requests.
+- The launch notification swapped "Auto scan" and "Auto clean".
+- Data race on the cached userbot's member cache between scans and MTProto
+  update handlers.
+
+#### Migration
+
+- `ChannelView` gained `keepBanned`, `cleanMessages`, `cleanUnknown`,
+  `customCleanOptions`; consumers of the JSON API see extra fields only.
+- The kicker no longer relies on `WithCleanMessages(true)` to actually remove
+  users; if you set `KeepBanned=false, CleanMessages=false` expecting a no-op,
+  that configuration now removes users.
+- Custom `Authorizer` implementations should read `CallbackQuery.From` for
+  callbacks (see Security).
+- **`telegram/bots/bot.New` now requests only `message`, `callback_query`,
+  `my_chat_member` and `chat_join_request` updates** (explicit
+  `allowed_updates`; Telegram used to reuse whatever list was set last). If
+  you register your own handlers for other update types (e.g. `channel_post`,
+  `chat_member`), they stop receiving updates; build the bot with your own
+  list instead.
+- `guard.CallbackQuery` and `telegram/userbots/userbot.Domain` are no longer
+  comparable (`==`), because of the new `From` field and internal state.
+- Scan workers now really run in parallel (`WithNProcessingThreads`, default
+  4): expect up to that many concurrent member listings and checker calls.
+- `HybridAuthorizer` caches chat admin lists for a minute
+  (`WithAdminCacheTTL(0)` restores a lookup per command); a demoted admin
+  keeps access up to that long.
+- Bot commands that take a channel id (`/settings`, `/setflag`, `/users`,
+  `/remove`, `/rmconfirm`) now go through the authorizer and must come from a
+  control chat of that channel; `/add` in a private chat is allowed for anyone
+  who passes the default access checker.
+- Storage: new optional ports (`WithWhitelistStorage`, `WithAuditStorage`,
+  `WithKnownChatStorage`, `WithJoinRequestStorage`); records in `pChannel`
+  gain optional fields and stay readable by older versions. A custom Redis
+  client for the audit log needs `ListPush`/`ListRange`.
+- Mini App users must **Join** each channel once before managing it
+  (`ProtectedChannel.Managers` starts empty).
+- **Requires Go 1.26** (`go.mod`), up from 1.23: the updated `golang.org/x/*`
+  modules need it.
+- Web session tokens changed format: existing dashboard sessions are
+  invalidated once, users sign in again.
+- This is a pre-1.0 minor release: it contains the breaking changes above.
+- Mini App (optional): serve `webapi.Server` over public HTTPS, pass
+  `webapi.WithMiniApp(domain, hybridAuthorizer)` and
+  `scanner.WithUserKicker(kicker)`, `scanner.WithDefaultCleanOptions(kicker.DefaultCleanOptions())`,
+  `scanner.WithMiniApp(url, shortName)`; register the Mini App in BotFather.
+
+### Management UI, authorization, hardening (July 2026)
+
+#### Added
 
 - `guard.ChannelInfo.Type` (`string`) — the Telegram chat type, plus
   `ChatType*` constants (`ChatTypePrivate`, `ChatTypeGroup`,
@@ -44,16 +232,11 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   `Drop` when a channel is fully detached (no remaining controlling chats) and
   `Store` when its set of controlling chats changes, so in-memory removals
   survive restarts.
-- `processors.CleanOptions` (`KeepBanned`, `CleanMessages`, `CleanUnknown`) and
-  an optional `AccessReport.CleanOptions` field, so cleanup behavior can be
-  configured per-channel instead of only process-wide.
-- `kicker.UserRestrictor` — a transport-agnostic domain interface
-  (`SendReportMessage`, `Ban`, `Unban`) that the kicker consumes. The bundled
-  `telegram/bots/bot.Domain` implements it (`Ban`/`Unban`/`SendReportMessage`),
-  including the Bot API `-100` chat-ID normalization that previously lived
-  inside the kicker.
-- `scanner.ProtectedChannel.CleanOptions` (`*processors.CleanOptions`) —
-  per-channel cleanup overrides forwarded into the cleaner's `AccessReport`.
+- `kicker.TelegramBotUserKicker` is now transport-agnostic (`Ban`, `Unban`,
+  `SendReport`). `telegram/sender/ratelimited.Restrictor` implements it on top
+  of `telegram/bots/bot.Domain` (`Ban`/`Unban`/`SendReportMessage`, including
+  the Bot API `-100` chat-ID normalization that previously lived in the
+  kicker), adding rate limiting and FLOOD_WAIT retries.
 - **Command authorization subsystem.** New `scanner.Authorizer` interface
   (`Authorize(ctx, *guard.Update) (bool, error)`) and a `scanner.WithAuthorizer`
   option. The bundled default lives in `controllers/scanner/authorizer` as
@@ -85,7 +268,7 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   above. Future interface/contract changes will be recorded under this section
   until the next tagged release.
 
-### Security
+#### Security
 
 - Previously **any member of a controlling chat** could run `/scan`, `/clean`,
   `/list`, `/add` and similar commands — there was no authorization at all. The
@@ -93,15 +276,13 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   `Domain.requireAuth`. The default remains allow-all unless an authorizer is
   configured, so existing deployments keep working.
 
-### Changed
+#### Changed
 
-- **`kicker.New` now takes a `UserRestrictor` instead of `*bot.Bot`.** The
-  kicker no longer imports `github.com/go-telegram/bot`; it operates purely on
-  domain types. Per-channel `CleanOptions` (when present) override the
-  kicker's process-wide defaults.
-- `kicker.TelegramBotUserKicker` is **removed** in favor of `UserRestrictor`.
+- **`kicker.New` now takes a `kicker.TelegramBotUserKicker` (`Ban`, `Unban`,
+  `SendReport`) instead of `*bot.Bot`.** The kicker no longer imports
+  `github.com/go-telegram/bot`.
 
-### Fixed
+#### Fixed
 
 - **Layering violation:** `storage/channels/redis/drop.go` previously imported
   `controllers/scanner` (a controller→storage dependency in reverse) and used
@@ -111,7 +292,7 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   twice; the second call should have been `kicker.WithCleanUnknown(...)`, so the
   "kick unknown users" flag was silently ignored. Fixed.
 
-### Migration
+#### Migration
 
 - **`ProtectedChannelStorage` gained a `Drop` method.** Any custom
   implementation of this interface (including non-redis backends) must add:
@@ -123,15 +304,11 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 - `redis.Domain.Drop` changed its signature from
   `Drop(ctx, *scanner.ProtectedChannel)` to `Drop(ctx, channelID int64)`.
   Anyone calling the old (previously unused) method must update the call site.
-- **`kicker.New(restrictor UserRestrictor, opts...)`** — callers that passed
-  `telegramBotDomain.GetBot()` (`*bot.Bot`) must now pass the bot **domain**
-  (`telegramBotDomain`), which implements `UserRestrictor`.
-- Any custom type passed to the kicker must implement the new
-  `UserRestrictor` interface (`SendReportMessage`, `Ban`, `Unban`). The old
-  `TelegramBotUserKicker` interface is gone.
-- Optional: to enable per-channel cleanup behavior, set
-  `scanner.ProtectedChannel.CleanOptions`. Otherwise the kicker's configured
-  defaults apply as before.
+- **`kicker.New`** — callers that passed `telegramBotDomain.GetBot()`
+  (`*bot.Bot`) must now pass a `kicker.TelegramBotUserKicker`, normally
+  `ratelimited.NewRestrictor(telegramBotDomain, time.Second, 5)`.
+- Any custom type passed to the kicker must implement `Ban`, `Unban` and
+  `SendReport`.
 - **`scanner.TelegramBot` gained `GetChatAdministrators`.** Any custom
   implementation of this interface must add it. The bundled
   `telegram/bots/bot.Domain` already provides it.

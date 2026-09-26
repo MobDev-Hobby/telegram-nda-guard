@@ -8,6 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 	"github.com/MobDev-Hobby/telegram-nda-guard/storage/channels"
 )
 
@@ -178,4 +179,53 @@ type ProtectedChannelStorageWithDrop interface {
 	LoadAll(context.Context) ([]channels.ProtectedChannel, error)
 	Store(context.Context, *channels.ProtectedChannel) error
 	Drop(context.Context, int64) error
+}
+
+func TestAddProtectedChannel_ReAddMergesInsteadOfOverwriting(t *testing.T) {
+	storage := newMemoryStorage()
+	d := newTestDomain(t, storage)
+	first := &ProtectedChannel{
+		ID:                100,
+		CommandChannelIDs: []int64{5},
+		AllowClean:        false,
+		CleanOptions:      &processors.CleanOptions{CleanUnknown: true},
+		Managers:          []int64{7},
+		JoinRequestMode:   JoinModeManual,
+	}
+	if err := d.AddProtectedChannel(first); err != nil {
+		t.Fatal(err)
+	}
+
+	// /add from another chat by another admin builds a fresh default record.
+	again := &ProtectedChannel{ID: 100, CommandChannelIDs: []int64{9}, AllowClean: true, Managers: []int64{8}}
+	if err := d.AddProtectedChannel(again); err != nil {
+		t.Fatal(err)
+	}
+
+	got := d.protectedChannels[100]
+	assertMerged(t, "memory", got.CommandChannelIDs, got.Managers, got.AllowClean, got.CleanOptions != nil && got.CleanOptions.CleanUnknown, got.JoinRequestMode)
+	persisted, ok := storage.get(100)
+	if !ok {
+		t.Fatal("not persisted")
+	}
+	assertMerged(t, "storage", persisted.CommandChannelIDs, persisted.Managers, persisted.AllowClean, persisted.CleanOptions != nil && persisted.CleanOptions.CleanUnknown, persisted.JoinRequestMode)
+	if got := d.channels[100].commandChannelIDs; len(got) != 2 {
+		t.Errorf("channel cache has control chats %v", got)
+	}
+	if got := d.commandChannels[9]; len(got) != 1 || got[0] != 100 {
+		t.Errorf("new control chat not registered: %v", got)
+	}
+}
+
+func assertMerged(t *testing.T, where string, chats, managers []int64, allowClean, cleanUnknown bool, mode string) {
+	t.Helper()
+	if len(chats) != 2 || chats[0] != 5 || chats[1] != 9 {
+		t.Errorf("%s: control chats %v, want [5 9]", where, chats)
+	}
+	if len(managers) != 2 || managers[0] != 7 || managers[1] != 8 {
+		t.Errorf("%s: managers %v, want [7 8]", where, managers)
+	}
+	if allowClean || !cleanUnknown || mode != JoinModeManual {
+		t.Errorf("%s: settings were overwritten: allowClean=%v cleanUnknown=%v mode=%q", where, allowClean, cleanUnknown, mode)
+	}
 }
