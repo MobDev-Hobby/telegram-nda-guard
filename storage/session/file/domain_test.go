@@ -5,6 +5,8 @@ import (
 	"crypto/aes"
 	"crypto/rand"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,6 +25,15 @@ func TestNew(t *testing.T) {
 	// the package source tree and so concurrent subtests do not share state.
 	tmpDir := t.TempDir()
 
+	// notADir is a path whose parent is a regular file, so neither MkdirAll
+	// nor WriteFile can succeed under it (ENOTDIR). Unlike a read-only
+	// system directory this fails for root too: CI runs the job as root
+	// inside the self-hosted runner container, where "/tmp/../../" (i.e. "/")
+	// is writable and New would even chmod "/" to 0700.
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	assert.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	notADir := filepath.Join(blocker, "sessions")
+
 	t.Run(
 		"success", func(t *testing.T) {
 			storage, err := New(cryptor, WithStoragePath(tmpDir))
@@ -39,7 +50,7 @@ func TestNew(t *testing.T) {
 
 	t.Run(
 		"domain init error", func(t *testing.T) {
-			_, err := New(cryptor, WithStoragePath("/tmp/../../"))
+			_, err := New(cryptor, WithStoragePath(notADir))
 			assert.Error(t, err)
 		},
 	)
@@ -118,7 +129,7 @@ func TestNew(t *testing.T) {
 			storage, err := New(cryptor, WithStoragePath(tmpDir))
 			assert.NoError(t, err)
 
-			storage.dir = "/tmp/../../"
+			storage.dir = notADir
 
 			err = storage.StoreSession(ctx, "name", data)
 			assert.Error(t, err)
