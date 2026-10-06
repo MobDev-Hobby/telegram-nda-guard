@@ -9,7 +9,11 @@ on:
 jobs:
   build-test:
     name: build & test
-    runs-on: ubuntu-latest
+    # Self-hosted раннер на collider (пул telegram-nda-guard-runner, роль
+    # `runners` в MobDev-Hobby/infra, образ ubuntu-noble): с 02.10.2026 GitHub
+    # не запускает аккаунту задачи на ubuntu-latest («recent account payments
+    # have failed»). Go ставит setup-go; gcc для `-race` в образе есть.
+    runs-on: [self-hosted, linux, X64, build]
     # Use the public Go proxy so the build is reproducible outside any
     # corporate network. Local dev machines may override GOPROXY via
     # `go env -w`, but CI must not depend on a private proxy.
@@ -35,7 +39,7 @@ jobs:
 
   lint:
     name: golangci-lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, X64, build]
     env:
       GOPROXY: https://proxy.golang.org,direct
       GOFLAGS: -mod=mod
