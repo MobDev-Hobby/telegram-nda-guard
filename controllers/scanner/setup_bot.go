@@ -59,10 +59,20 @@ func (d *Domain) updateChannelInfo(ctx context.Context) error {
 		if channel != nil {
 			d.channelsMutex.Lock()
 			channelInfo := d.channels[channelID]
-			channelInfo.title = channel.Title
+			if channel.Title != "" {
+				channelInfo.title = channel.Title
+			}
 			channelInfo.chatType = channel.Type
 			d.channels[channelID] = channelInfo
 			d.channelsMutex.Unlock()
+			if err := d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
+				if channel.Title != "" {
+					pc.Title = channel.Title
+				}
+				pc.ChatType = channel.Type
+			}); err != nil {
+				d.log.Errorf("can't remember chat identity: %s", err)
+			}
 
 			if channel.MigratedTo != nil {
 				err := d.MigrateChannel(channelID, *channel.MigratedTo)
@@ -94,7 +104,6 @@ func (d *Domain) updateChannelInfo(ctx context.Context) error {
 func (d *Domain) updateBotAccessRights(ctx context.Context) error {
 	for _, channelID := range d.snapshotChannelIDs() {
 		d.channelsMutex.RLock()
-		channel := d.channels[channelID]
 		protectedChannel, ok := d.protectedChannels[channelID]
 		d.channelsMutex.RUnlock()
 		if !ok {
@@ -102,7 +111,7 @@ func (d *Domain) updateBotAccessRights(ctx context.Context) error {
 			// d.protectedChannels (e.g. during a migration, where the two
 			// maps are updated non-atomically). Logging and continuing is
 			// correct; panicking the whole bot over a transient state is not.
-			d.log.Errorf("Channel %s not found in protected channels", channel.title)
+			d.log.Errorf("Channel %d not found in protected channels", channelID)
 			continue
 		}
 
@@ -120,41 +129,25 @@ func (d *Domain) updateBotAccessRights(ctx context.Context) error {
 		}
 
 		d.channelsMutex.Lock()
-		if !isMember {
-			d.NotifyAdmin(
-				ctx,
-				fmt.Sprintf(
-					"I need to be member of channel [%d]<b>%s</b>, add me, please",
-					channelID,
-					channel.title,
-				),
-			)
-			channel.botOnChannel = false
-			d.channels[channelID] = channel
+		channel, exists := d.channels[channelID]
+		if !exists {
 			d.channelsMutex.Unlock()
 			continue
 		}
-
-		channel.botOnChannel = true
-
-		channel.botCanInvite = permissions[guard.CanInviteUsers]
-		channel.botCanClean = permissions[guard.CanRestrictMembers]
-
-		if !permissions[guard.CanRestrictMembers] &&
-			(protectedChannel.AllowClean || protectedChannel.AutoClean) {
-
-			d.NotifyAdmin(
-				ctx,
-				fmt.Sprintf(
-					"I need to have admin permissions to clean channel [%d]<b>%s</b>, promote me, please",
-					channelID,
-					channel.title,
-				),
-			)
-		}
-
+		channel.botOnChannel = isMember
+		channel.botCanInvite = isMember && permissions[guard.CanInviteUsers]
+		channel.botCanClean = isMember && permissions[guard.CanRestrictMembers]
 		d.channels[channelID] = channel
 		d.channelsMutex.Unlock()
+		if !isMember {
+			d.notifyRightsIssue(ctx, protectedChannel, "member", "Add the bot to this chat.")
+		} else if !channel.botCanClean && (protectedChannel.AllowClean || protectedChannel.AutoClean) {
+			d.notifyRightsIssue(ctx, protectedChannel, "restrict", "Give the bot administrator rights to restrict members.")
+		} else {
+			d.notificationMutex.Lock()
+			delete(d.noticeTimes, channelID)
+			d.notificationMutex.Unlock()
+		}
 	}
 
 	return nil

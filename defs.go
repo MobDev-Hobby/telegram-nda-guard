@@ -81,6 +81,8 @@ type Message struct {
 }
 
 type ChatShared struct {
+	Title     string
+	Username  string
 	ChatID    int64
 	RequestID int
 }

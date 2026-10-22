@@ -62,6 +62,13 @@ func (d *Domain) AddDefaultProtectedChannel(pc *ProtectedChannel) error {
 	}
 	return d.AddProtectedChannel(&ProtectedChannel{
 		ID:                   pc.ID,
+		Title:                pc.Title,
+		ChatType:             pc.ChatType,
+		AddedBy:              pc.AddedBy,
+		AddedByName:          pc.AddedByName,
+		AddedAt:              pc.AddedAt,
+		Notifications:        pc.Notifications,
+		LastNotifiedAt:       pc.LastNotifiedAt,
 		CommandChannelIDs:    pc.CommandChannelIDs,
 		AutoScan:             pc.AutoScan,
 		AutoClean:            pc.AutoClean,
@@ -97,7 +104,6 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 	// only adds control chats and managers; everything else stays as is.
 	d.channelsMutex.Lock()
 	existing, found := d.protectedChannels[channel.ID]
-	d.channelsMutex.Unlock()
 	record := *channel
 	if found {
 		record = mergeProtectedChannel(existing, *channel)
@@ -108,10 +114,10 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 		defer cancel()
 		err := d.storage.Store(ctx, storageRecord(record))
 		if err != nil {
+			d.channelsMutex.Unlock()
 			return err
 		}
 	}
-	d.channelsMutex.Lock()
 
 	// Protected channels list
 	if existing, found := d.protectedChannels[channel.ID]; found {
@@ -148,6 +154,12 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 	// Channel cache
 	info := d.channels[channel.ID]
 	info.id = channel.ID
+	if channel.Title != "" {
+		info.title = channel.Title
+	}
+	if channel.ChatType != "" {
+		info.chatType = channel.ChatType
+	}
 	info.commandChannelIDs = channel.CommandChannelIDs
 	d.channels[channel.ID] = info
 
@@ -179,6 +191,17 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 // existing and keeps every other field of existing.
 func mergeProtectedChannel(existing, added ProtectedChannel) ProtectedChannel {
 	merged := existing
+	if merged.Title == "" {
+		merged.Title = added.Title
+	}
+	if merged.ChatType == "" {
+		merged.ChatType = added.ChatType
+	}
+	if merged.AddedBy == 0 {
+		merged.AddedBy, merged.AddedByName, merged.AddedAt = added.AddedBy, added.AddedByName, added.AddedAt
+	} else if merged.AddedBy == added.AddedBy && merged.AddedByName == "" {
+		merged.AddedByName = added.AddedByName
+	}
 	merged.CommandChannelIDs = slices.Clone(existing.CommandChannelIDs)
 	for _, id := range added.CommandChannelIDs {
 		if !slices.Contains(merged.CommandChannelIDs, id) {
@@ -366,6 +389,13 @@ func storageRecord(pc ProtectedChannel) *channels.ProtectedChannel {
 	}
 	return &channels.ProtectedChannel{
 		ID:                pc.ID,
+		Title:             pc.Title,
+		ChatType:          pc.ChatType,
+		AddedBy:           pc.AddedBy,
+		AddedByName:       pc.AddedByName,
+		AddedAt:           pc.AddedAt,
+		Notifications:     pc.Notifications,
+		LastNotifiedAt:    pc.LastNotifiedAt,
 		CommandChannelIDs: pc.CommandChannelIDs,
 		AutoScan:          pc.AutoScan,
 		AutoClean:         pc.AutoClean,

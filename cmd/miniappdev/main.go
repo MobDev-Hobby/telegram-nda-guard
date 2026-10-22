@@ -74,6 +74,9 @@ func (s *svc) SetChannelSettings(_ context.Context, id int64, st scanner.Channel
 	c.AutoScan, c.AutoClean, c.AllowClean = st.AutoScan, st.AutoClean, st.AllowClean
 	c.KeepBanned, c.CleanMessages, c.CleanUnknown, c.CustomCleanOptions = st.KeepBanned, st.CleanMessages, st.CleanUnknown, true
 	c.JoinRequests = st.JoinRequests
+	if st.Notifications != nil {
+		c.Notifications = *st.Notifications
+	}
 	s.channels[id] = c
 	s.log(audit.ActionSettingsChanged, nil, nil)
 	return nil
@@ -82,13 +85,13 @@ func (s *svc) StartChannelScan(_ context.Context, id, _ int64) (scanner.ScanView
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.started = now()
-	s.scan = &scanner.ScanView{ID: "dev1", ChannelID: id, Title: s.channels[id].Title, State: scanner.ScanStateRunning}
+	s.scan = &scanner.ScanView{ID: "dev1", ChannelID: id, Title: s.channels[id].Title, State: scanner.ScanStateRunning, StartedAt: s.started}
 	return *s.scan, nil
 }
-func (s *svc) GetChannelScan(context.Context, int64, string) (scanner.ScanView, error) {
+func (s *svc) GetChannelScan(_ context.Context, channelID int64, scanID string) (scanner.ScanView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.scan == nil {
+	if s.scan == nil || s.scan.ChannelID != channelID || (scanID != "latest" && scanID != s.scan.ID) {
 		return scanner.ScanView{}, scanner.ErrScanNotFound
 	}
 	el := time.Since(s.started)
@@ -103,6 +106,8 @@ func (s *svc) GetChannelScan(context.Context, int64, string) (scanner.ScanView, 
 			past := now().Add(-3 * 24 * time.Hour)
 			del := now().Add(5 * 24 * time.Hour)
 			v.State, v.Partial, v.Checked = scanner.ScanStateDone, true, 9
+			finished := now()
+			v.FinishedAt = &finished
 			v.Users = []scanner.ScannedUser{
 				{ID: 1, FirstName: "Иван", LastName: "Внешний", Username: "ivan_ext", Status: "bad"},
 				{ID: 2, FirstName: "<script>alert(1)</script>", Status: "bad"},
@@ -347,7 +352,7 @@ func main() {
 	check := func(at time.Time, bad int) *processors.CheckSummary {
 		return &processors.CheckSummary{At: at, Bad: bad, Good: 40}
 	}
-	base := scanner.ChannelView{BotOnChannel: true, BotCanClean: true, BotCanInvite: true, AllowClean: true, WhitelistEnabled: true, WhitelistTTLDays: 30, JoinRequestsEnabled: true, JoinRequests: "off", CleanMessages: true}
+	base := scanner.ChannelView{AddedBy: 5, AddedByName: "Anna Admin", Notifications: processors.NotificationOptions{Mode: scanner.NotificationViolationsSummary, IntervalHours: 24}, BotOnChannel: true, BotCanClean: true, BotCanInvite: true, AllowClean: true, WhitelistEnabled: true, WhitelistTTLDays: 30, JoinRequestsEnabled: true, JoinRequests: "off", CleanMessages: true}
 	mk := func(id int64, title, typ string, h scanner.ChannelHealth, joins string) scanner.ChannelView {
 		c := base
 		c.ID, c.Title, c.ChatType, c.Health, c.JoinRequests = id, title, typ, h, joins

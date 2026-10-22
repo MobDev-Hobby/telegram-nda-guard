@@ -3,6 +3,7 @@ package kicker
 import (
 	"context"
 	"fmt"
+	"html"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
@@ -36,7 +37,7 @@ func (d *Domain) ProcessReport(
 			"\n\nKicked <b>%d/%d</b> bad users.\n\n"+
 			"<b>Settings:</b>\n"+
 			"• Keep banned: <b>%t</b>. \n"+
-			"• Clean messages: <b>%t</b>. \n"+
+			"• Hide history for removed member: <b>%t</b>. \n"+
 			"• Clean unknown: <b>%t</b>",
 		guard.ChatTypeNoun(report.Channel.Type),
 		report.Channel.Title,
@@ -49,6 +50,9 @@ func (d *Domain) ProcessReport(
 		opts.CleanMessages,
 		opts.CleanUnknown,
 	)
+	if report.ViolationsOnly {
+		message = fmt.Sprintf("<b>Issues in %s %s</b>\nRemoved %d/%d; failing: %d; unchecked: %d.", guard.ChatTypeNoun(report.Channel.Type), html.EscapeString(report.Channel.Title), cleanedUsers, len(usersToClean), len(report.DeniedUsers), len(report.UnknownUsers))
+	}
 	if report.Stats.Partial() {
 		message += fmt.Sprintf(
 			"\n\n⚠️ Telegram returned only <b>%d of %d</b> members, the rest were not checked.",

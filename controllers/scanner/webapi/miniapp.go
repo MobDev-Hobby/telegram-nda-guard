@@ -185,7 +185,7 @@ func (s *Server) handleMiniAppChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.channelAuth.IsPrivileged(ctx, callerID) && !s.miniApp.IsChannelManager(channelID, callerID) {
-		writeErrorCode(w, http.StatusForbidden, codeNotJoined, "join the channel in the bot first")
+		writeErrorCode(w, http.StatusForbidden, codeNotJoined, "Присоединитесь к управлению каналом в приложении.")
 		return
 	}
 

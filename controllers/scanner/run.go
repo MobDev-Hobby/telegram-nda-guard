@@ -24,6 +24,13 @@ func (d *Domain) Run(
 		for _, protectedChannel := range protectedChannels {
 			protectedChannel := ProtectedChannel{
 				ID:                protectedChannel.ID,
+				Title:             protectedChannel.Title,
+				ChatType:          protectedChannel.ChatType,
+				AddedBy:           protectedChannel.AddedBy,
+				AddedByName:       protectedChannel.AddedByName,
+				AddedAt:           protectedChannel.AddedAt,
+				Notifications:     protectedChannel.Notifications,
+				LastNotifiedAt:    protectedChannel.LastNotifiedAt,
 				CommandChannelIDs: protectedChannel.CommandChannelIDs,
 				AutoScan:          protectedChannel.AutoScan,
 				AutoClean:         protectedChannel.AutoClean,

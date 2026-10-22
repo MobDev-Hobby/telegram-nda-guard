@@ -176,7 +176,7 @@ func (d *Domain) JoinRequestHandler(ctx context.Context, update *guard.Update) {
 		Action: audit.ActionJoinRequested, Users: []audit.User{u},
 		Details: map[string]any{"check": r.Check, "mode": pc.JoinRequestMode},
 	}, "")
-	if pc.JoinRequestMode == JoinModeManual {
+	if pc.JoinRequestMode == JoinModeManual && (notificationOptions(pc.Notifications).Mode == NotificationAll || r.Check != UserStatusGood) {
 		text := fmt.Sprintf("<b>Join request to %s</b>\n\n%s — access check: <b>%s</b>.\nApprove or decline it in the app: /app → Requests.",
 			html.EscapeString(d.channelTitle(pc.ID)), html.EscapeString(joinName(r)), r.Check)
 		d.notifyControlChats(ctx, pc, text)

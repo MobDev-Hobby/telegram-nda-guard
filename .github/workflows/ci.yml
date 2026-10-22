@@ -24,6 +24,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Mini App client regression tests
+        run: node --test controllers/scanner/webapi/miniapp_ui_test.cjs
+
       - name: go vet
         run: go vet ./...
 

@@ -3,6 +3,7 @@ package reporter
 import (
 	"context"
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/go-telegram/bot"
@@ -21,7 +22,7 @@ func (d *Domain) ProcessReport(
 	messages := make([]string, 0, 1)
 	message := strings.Builder{}
 
-		_, err := fmt.Fprintf(
+	_, err := fmt.Fprintf(
 		&message,
 		"<b>Scan report for %s %s</b>"+
 			"\n\n<b>Users:</b>"+
@@ -38,8 +39,12 @@ func (d *Domain) ProcessReport(
 		d.log.Errorf("ProcessReport write message failed: %v", err)
 	}
 
+	if report.ViolationsOnly {
+		message.Reset()
+		fmt.Fprintf(&message, "<b>Issues in %s %s</b>\n", guard.ChatTypeNoun(report.Channel.Type), html.EscapeString(report.Channel.Title))
+	}
 	if report.Stats.Partial() {
-				_, err := fmt.Fprintf(
+		_, err := fmt.Fprintf(
 			&message,
 			"\n⚠️ Telegram returned only <b>%d of %d</b> members, the rest were not checked.\n",
 			report.Stats.Fetched,

@@ -32,7 +32,7 @@ func (d *Domain) recordAudit(ctx context.Context, pc ProtectedChannel, event aud
 		}
 		cancel()
 	}
-	if chatText != "" {
+	if chatText != "" && notificationOptions(pc.Notifications).Mode == NotificationAll {
 		d.notifyControlChats(ctx, pc, chatText)
 	}
 }

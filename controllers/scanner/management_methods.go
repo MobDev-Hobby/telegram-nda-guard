@@ -41,6 +41,7 @@ func (d *Domain) channelViewLocked(channelID int64) (ChannelView, bool) {
 		AutoClean:    pc.AutoClean,
 		AllowClean:   pc.AllowClean,
 		BotOnChannel: ch.botOnChannel,
+		Connecting:   ch.connecting,
 		BotCanInvite: ch.botCanInvite,
 		BotCanClean:  ch.botCanClean,
 	}
@@ -49,6 +50,21 @@ func (d *Domain) channelViewLocked(channelID int64) (ChannelView, bool) {
 }
 
 func (d *Domain) fillCleanOptions(v *ChannelView, pc ProtectedChannel) {
+	if v.Title == "" || v.Title == fmt.Sprint(pc.ID) {
+		v.Title = pc.Title
+	}
+	if v.Title == "" {
+		v.Title = fmt.Sprint(pc.ID)
+	}
+	if v.ChatType == "" {
+		v.ChatType = pc.ChatType
+	}
+	v.AddedBy, v.AddedByName = pc.AddedBy, pc.AddedByName
+	if !pc.AddedAt.IsZero() {
+		at := pc.AddedAt
+		v.AddedAt = &at
+	}
+	v.Notifications = notificationOptions(pc.Notifications)
 	opts := d.defaultCleanOptions
 	if pc.CleanOptions != nil {
 		opts = *pc.CleanOptions

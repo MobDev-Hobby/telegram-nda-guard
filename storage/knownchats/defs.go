@@ -10,6 +10,8 @@ type Chat struct {
 	Title string `json:"title"`
 	Type  string `json:"type"`
 	// AddedBy is who made the bot an administrator.
+	AddedByName        string    `json:"addedByName,omitempty"`
+	Status             string    `json:"status,omitempty"`
 	AddedBy            int64     `json:"addedBy,omitempty"`
 	AddedAt            time.Time `json:"addedAt"`
 	CanRestrictMembers bool      `json:"canRestrictMembers"`

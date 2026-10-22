@@ -141,6 +141,7 @@ func newMiniAppDomain(t *testing.T, allowClean bool) (*Domain, *fakeBot, *fakeUs
 		ID:                testChannelID,
 		CommandChannelIDs: []int64{555},
 		AllowClean:        allowClean,
+		Notifications:     &processors.NotificationOptions{Mode: NotificationAll, IntervalHours: 24},
 	}))
 	d.channelsMutex.Lock()
 	ch := d.channels[testChannelID]

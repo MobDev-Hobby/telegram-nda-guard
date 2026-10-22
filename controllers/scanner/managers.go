@@ -39,7 +39,15 @@ func (d *Domain) JoinChannel(ctx context.Context, channelID, callerID int64) err
 // notifyManagers sends text to every manager in private. Managers who never
 // started the bot can't be messaged; that is logged and skipped.
 func (d *Domain) notifyManagers(ctx context.Context, pc ProtectedChannel, text string) {
+	seen := map[int64]bool{}
+	for _, id := range pc.CommandChannelIDs {
+		seen[id] = true
+	}
 	for _, userID := range pc.Managers {
+		if seen[userID] {
+			continue
+		}
+		seen[userID] = true
 		if err := d.telegramBot.SendMessage(ctx, d.withAppButton(pc.ID, userID, text)); err != nil {
 			d.log.Warnf("can't message manager %d of %d: %s", userID, pc.ID, err)
 		}
