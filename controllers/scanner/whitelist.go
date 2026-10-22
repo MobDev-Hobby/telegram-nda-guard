@@ -528,6 +528,9 @@ func (d *Domain) withAppButton(channelID, chatID int64, text string) *guard.Mess
 
 // markWhitelisted flags a scanned user as covered by entry.
 func markWhitelisted(u *ScannedUser, e whitelist.Entry, now time.Time) {
+	if u.Status == UserStatusGood || u.Status == UserStatusBad || u.Status == UserStatusUnknown {
+		u.whitelistBaseStatus = u.Status
+	}
 	u.Status = UserStatusWhitelisted
 	if !u.Protected {
 		u.Protected = true

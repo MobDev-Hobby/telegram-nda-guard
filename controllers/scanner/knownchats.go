@@ -53,6 +53,8 @@ func (d *Domain) loadKnownChats(ctx context.Context) {
 			}
 			if pc.AddedBy == 0 {
 				pc.AddedBy, pc.AddedByName, pc.AddedAt = c.AddedBy, c.AddedByName, c.AddedAt
+			} else if pc.AddedBy == c.AddedBy && pc.AddedByName == "" {
+				pc.AddedByName = c.AddedByName
 			}
 		})
 		d.channelsMutex.Lock()
@@ -108,7 +110,11 @@ func (d *Domain) BotMembershipHandler(ctx context.Context, update *guard.Update)
 	}
 	d.knownMutex.Lock()
 	if old, ok := d.knownChats[chat.ID]; ok {
+		incomingActor, incomingName := chat.AddedBy, chat.AddedByName
 		chat.AddedBy, chat.AddedByName, chat.AddedAt = old.AddedBy, old.AddedByName, old.AddedAt
+		if old.AddedBy == incomingActor && chat.AddedByName == "" {
+			chat.AddedByName = incomingName
+		}
 		if chat.Title == "" {
 			chat.Title = old.Title
 		}
@@ -125,6 +131,8 @@ func (d *Domain) BotMembershipHandler(ctx context.Context, update *guard.Update)
 			pc.Title, pc.ChatType = chat.Title, chat.Type
 			if pc.AddedBy == 0 {
 				pc.AddedBy, pc.AddedByName, pc.AddedAt = chat.AddedBy, chat.AddedByName, chat.AddedAt
+			} else if pc.AddedBy == chat.AddedBy && pc.AddedByName == "" {
+				pc.AddedByName = chat.AddedByName
 			}
 		})
 		d.channelsMutex.Lock()

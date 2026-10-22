@@ -36,6 +36,10 @@ func (d *Domain) cacheReport(ctx context.Context, ch ChannelInfo, report process
 			note, isProtected := protected[user.ID]
 			su := ScannedUser{ID: user.ID, FirstName: user.FirstName, LastName: user.LastName, Username: user.Username, Status: group.status, Protected: isProtected, Note: note}
 			if entry, ok := d.whitelistEntry(ctx, ch.id, user.ID); ok {
+				// Allowed by the whitelist does not establish an employee verdict.
+				if group.status == UserStatusGood {
+					su.Status = ""
+				}
 				markWhitelisted(&su, entry, d.now())
 			}
 			job.users[user.ID] = user
@@ -88,6 +92,9 @@ func (d *Domain) syncWhitelistScans(ctx context.Context, channelID int64) {
 			} else if u.Status == UserStatusWhitelisted {
 				u.Whitelist = nil
 				u.Status = UserStatusUnknown
+				if u.whitelistBaseStatus != "" {
+					u.Status = u.whitelistBaseStatus
+				}
 				if u.Check != "" {
 					u.Status = u.Check
 				}

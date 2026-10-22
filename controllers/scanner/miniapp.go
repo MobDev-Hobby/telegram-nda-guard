@@ -84,11 +84,12 @@ type ChannelSettings struct {
 // left out: the Mini App shows scan results to channel admins, who have no
 // need for members' phones.
 type ScannedUser struct {
-	ID        int64  `json:"id"`
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName,omitempty"`
-	Username  string `json:"username,omitempty"`
-	Status    string `json:"status"`
+	whitelistBaseStatus string
+	ID                  int64  `json:"id"`
+	FirstName           string `json:"firstName"`
+	LastName            string `json:"lastName,omitempty"`
+	Username            string `json:"username,omitempty"`
+	Status              string `json:"status"`
 	// Protected users (channel admins, the bot itself) can't be kicked.
 	Protected bool   `json:"protected,omitempty"`
 	Note      string `json:"note,omitempty"`

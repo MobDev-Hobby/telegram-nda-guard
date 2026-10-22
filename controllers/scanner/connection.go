@@ -10,17 +10,19 @@ import (
 // Publish the protected channel before Telegram round trips. Never run the
 // entire rights sweep in the HTTP connect request: large installations can
 // take minutes and leave users uncertain whether the operation succeeded.
-func (d *Domain) refreshConnectedChat(channelID int64) {
+func (d *Domain) refreshConnectedChat(channelID int64) <-chan struct{} {
 	d.channelsMutex.Lock()
 	ch := d.channels[channelID]
-	if ch.connecting {
+	if ch.connecting && ch.connectDone != nil {
 		d.channelsMutex.Unlock()
-		return
+		return ch.connectDone
 	}
-	ch.connecting = true
+	done := make(chan struct{})
+	ch.connecting, ch.rightsChecked, ch.connectDone = true, false, done
 	d.channels[channelID] = ch
 	d.channelsMutex.Unlock()
 	go func() {
+		defer close(done)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		chat, chatErr := d.telegramBot.GetChat(ctx, channelID)
@@ -54,6 +56,7 @@ func (d *Domain) refreshConnectedChat(channelID int64) {
 			}
 			current.chatType = chat.Type
 		}
+		current.rightsChecked = err == nil
 		if err == nil {
 			current.botOnChannel = member
 			current.botCanClean = permissions[guard.CanRestrictMembers]
@@ -61,4 +64,5 @@ func (d *Domain) refreshConnectedChat(channelID int64) {
 		}
 		d.channels[channelID] = current
 	}()
+	return done
 }

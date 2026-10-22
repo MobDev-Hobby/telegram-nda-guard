@@ -15,6 +15,8 @@ type ChannelInfo struct {
 	botCanInvite      bool
 	botCanClean       bool
 	connecting        bool
+	connectDone       <-chan struct{}
+	rightsChecked     bool
 }
 
 func (ci *ChannelInfo) CanScan() bool {

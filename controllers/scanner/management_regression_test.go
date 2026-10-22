@@ -2,6 +2,8 @@ package scanner
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -239,4 +241,90 @@ func TestConnectPublishesIdentifiedPendingChannelBeforeTelegramFinishes(t *testi
 	require.Eventually(t, func() bool { v, _ := d.GetChannel(context.Background(), id); return !v.Connecting }, time.Second, time.Millisecond)
 	view, _ = d.GetChannel(context.Background(), id)
 	assert.Equal(t, "Resolved", view.Title)
+}
+
+type connectingAdminBot struct{ slowMetadataBot }
+
+func (b connectingAdminBot) CheckAccessUser(context.Context, int64, int64, ...guard.Permission) (bool, map[guard.Permission]bool, error) {
+	return true, map[guard.Permission]bool{guard.CanInviteUsers: true, guard.CanRestrictMembers: true}, nil
+}
+
+func TestAddReportsPendingUntilRightsAreKnown(t *testing.T) {
+	d, bot, _, _, _ := newMiniAppDomain(t, true)
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+	d.telegramBot = connectingAdminBot{slowMetadataBot{bot, release}}
+	const newID = int64(-9989)
+	d.addChannelHandlers[42] = 555
+	d.AddChannelCallbackHandler(context.Background(), &guard.Update{Message: &guard.MessageReceived{
+		Message:    guard.Message{ChatID: 555, ChatType: guard.ChatTypePrivate},
+		ChatShared: &guard.ChatShared{ChatID: newID, RequestID: 42, Title: "Pending team"},
+		User:       guard.User{ID: testAdminID, FirstName: "Admin"},
+	}})
+	bot.mu.Lock()
+	require.Len(t, bot.sent, 1)
+	assert.Contains(t, bot.sent[0].Text, "Checking permissions")
+	assert.NotContains(t, bot.sent[0].Text, "Scan - false")
+	bot.mu.Unlock()
+	unblock()
+	require.Eventually(t, func() bool {
+		bot.mu.Lock()
+		defer bot.mu.Unlock()
+		if len(bot.sent) < 2 {
+			return false
+		}
+		last := bot.sent[len(bot.sent)-1]
+		return strings.Contains(last.Text, "Scan - true") && strings.Contains(last.Text, "Clean - true") && len(last.InlineButtons) == 1 && len(last.InlineButtons[0]) == 2
+	}, time.Second, time.Millisecond)
+}
+
+func TestWhitelistRemovalRestoresOriginalScanVerdict(t *testing.T) {
+	for _, id := range []int64{1, 2} {
+		t.Run(fmt.Sprint(id), func(t *testing.T) {
+			env := newWhitelistDomain(t)
+			ctx := context.Background()
+			scan, original := scanUser(t, env.d, id)
+			_, err := env.d.AddToWhitelist(ctx, testChannelID, scan.ID, []int64{id}, "approved", 0, testAdminID)
+			require.NoError(t, err)
+			require.NoError(t, env.d.RemoveWhitelistEntry(ctx, testChannelID, id, testAdminID))
+			restored, err := env.d.GetChannelScan(ctx, testChannelID, scan.ID)
+			require.NoError(t, err)
+			for _, u := range restored.Users {
+				if u.ID == id {
+					assert.Equal(t, original.Status, u.Status)
+					assert.False(t, u.Protected)
+					assert.Nil(t, u.Whitelist)
+				}
+			}
+			view, err := env.d.GetChannel(ctx, testChannelID)
+			require.NoError(t, err)
+			assert.Equal(t, 2, view.Health.LastCheck.Bad)
+			assert.Equal(t, 1, view.Health.LastCheck.Unknown)
+		})
+	}
+}
+
+func TestMembershipUpdateBackfillsLegacyAdderNameOnlyForSameActor(t *testing.T) {
+	d, _, _, _, storage := newMiniAppDomain(t, true)
+	ctx := context.Background()
+	oldAt := time.Now().Add(-24 * time.Hour)
+	d.knownChats[testChannelID] = knownchats.Chat{ID: testChannelID, Title: "Team", AddedBy: 44, AddedAt: oldAt}
+	require.NoError(t, d.updateProtectedChannel(ctx, testChannelID, func(pc *ProtectedChannel) { pc.AddedBy = 44; pc.AddedAt = oldAt }))
+	update := func(id int64, name string) {
+		d.BotMembershipHandler(ctx, &guard.Update{MyChatMember: &guard.BotMembership{
+			Chat: guard.ChannelInfo{ID: testChannelID, Title: "Team", Type: guard.ChatTypeSupergroup},
+			From: guard.User{ID: id, FirstName: name}, Status: guard.MemberStatusAdministrator,
+		}})
+	}
+	update(55, "Other admin")
+	assert.Empty(t, storage.records[testChannelID].AddedByName)
+	update(44, "Artem")
+	assert.Equal(t, "Artem", storage.records[testChannelID].AddedByName)
+	assert.Equal(t, "Artem", d.knownChats[testChannelID].AddedByName)
+	assert.Equal(t, oldAt, storage.records[testChannelID].AddedAt)
+	update(55, "Another admin")
+	assert.Equal(t, int64(44), storage.records[testChannelID].AddedBy)
+	assert.Equal(t, "Artem", storage.records[testChannelID].AddedByName)
 }

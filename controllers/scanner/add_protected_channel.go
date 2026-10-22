@@ -199,6 +199,8 @@ func mergeProtectedChannel(existing, added ProtectedChannel) ProtectedChannel {
 	}
 	if merged.AddedBy == 0 {
 		merged.AddedBy, merged.AddedByName, merged.AddedAt = added.AddedBy, added.AddedByName, added.AddedAt
+	} else if merged.AddedBy == added.AddedBy && merged.AddedByName == "" {
+		merged.AddedByName = added.AddedByName
 	}
 	merged.CommandChannelIDs = slices.Clone(existing.CommandChannelIDs)
 	for _, id := range added.CommandChannelIDs {

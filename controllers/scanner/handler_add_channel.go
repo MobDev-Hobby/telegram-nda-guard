@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"strings"
+	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 	"github.com/MobDev-Hobby/telegram-nda-guard/storage/audit"
@@ -127,7 +128,7 @@ func (d *Domain) AddChannelCallbackHandler(
 		return
 	}
 
-	d.refreshConnectedChat(protectedChannel.ID)
+	rightsReady := d.refreshConnectedChat(protectedChannel.ID)
 
 	if pc, ok := d.getProtectedChannel(update.Message.ChatShared.ChatID); ok {
 		d.NoteUserName(update.Message.User.ID, strings.TrimSpace(update.Message.User.FirstName+" "+update.Message.User.LastName))
@@ -139,62 +140,45 @@ func (d *Domain) AddChannelCallbackHandler(
 
 	d.log.Infof("Added protected channel: %d with admin chat: %d/%s", update.Message.ChatShared.ChatID, update.Message.ChatID, update.Message.User.Username)
 
-	chanInfo, _ := d.getChannel(update.Message.ChatShared.ChatID)
-
-	var buttons []guard.InlineButton
-
-	if chanInfo.CanScan() {
-		buttons = append(
-			buttons,
-			guard.InlineButton{
-				Text:    "/scan",
-				Command: fmt.Sprintf("/scan %d", chanInfo.id),
-			},
-		)
+	chatID, channelID, threadID := update.Message.ChatID, protectedChannel.ID, update.Message.ThreadID
+	if err := d.telegramBot.SendMessage(ctx, &guard.Message{
+		ChatID: chatID, ThreadID: threadID,
+		Text:    fmt.Sprintf("<b>%s</b> (ID %d) registered. Checking permissions…", html.EscapeString(d.channelTitle(channelID)), channelID),
+		Buttons: d.getDefaultButtons(),
+	}); err != nil {
+		d.log.Errorf("can't send pending connection message: %s", err)
 	}
-	if chanInfo.CanClean() && protectedChannel.AllowClean {
-		buttons = append(
-			buttons,
-			guard.InlineButton{
-				Text:    "/clean",
-				Command: fmt.Sprintf("/clean %d", chanInfo.id),
-			},
-		)
-	}
+	go func() {
+		<-rightsReady
+		reportCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		d.sendAddedChannelStatus(reportCtx, channelID, chatID, threadID)
+	}()
+}
 
-	err = d.telegramBot.SendMessage(
-		ctx,
-		&guard.Message{
-			ChatID:   update.Message.ChatID,
-			ThreadID: update.Message.ThreadID,
-			Text:     "Channel registered. Checking permissions…",
-			Buttons:  d.getDefaultButtons(),
-		},
-	)
-
-	if err != nil {
-		d.log.Errorf("can't send message: %s", err)
-	}
-
-	err = d.telegramBot.SendMessage(
-		ctx,
-		&guard.Message{
-			ChatID:   update.Message.ChatID,
-			ThreadID: update.Message.ThreadID,
-			Text: fmt.Sprintf(
-				"%s <b>%s</b> added! \nCheck permissions:\n • Scan - %t\n • Clean - %t",
-				capitalize(guard.ChatTypeNoun(chanInfo.chatType)),
-				html.EscapeString(d.channelTitle(protectedChannel.ID)),
-				chanInfo.CanScan(),
-				chanInfo.CanClean() && protectedChannel.AllowClean,
-			),
-			InlineButtons: [][]guard.InlineButton{buttons},
-		},
-	)
-
-	if err != nil {
-		d.log.Errorf("can't send message: %s", err)
+func (d *Domain) sendAddedChannelStatus(ctx context.Context, channelID, chatID int64, threadID *int) {
+	chanInfo, ok := d.getChannel(channelID)
+	pc, protected := d.getProtectedChannel(channelID)
+	if !ok || !protected {
 		return
+	}
+	msg := &guard.Message{ChatID: chatID, ThreadID: threadID}
+	title := html.EscapeString(d.channelTitle(channelID))
+	if !chanInfo.rightsChecked {
+		msg.Text = fmt.Sprintf("<b>%s</b> (ID %d) registered. Telegram permissions could not be checked; retry /list later.", title, channelID)
+	} else {
+		buttons := []guard.InlineButton{}
+		if chanInfo.CanScan() {
+			buttons = append(buttons, guard.InlineButton{Text: "/scan", Command: fmt.Sprintf("/scan %d", channelID)})
+		}
+		if chanInfo.CanClean() && pc.AllowClean {
+			buttons = append(buttons, guard.InlineButton{Text: "/clean", Command: fmt.Sprintf("/clean %d", channelID)})
+		}
+		msg.Text = fmt.Sprintf("%s <b>%s</b> (ID %d) added!\nCheck permissions:\n • Scan - %t\n • Clean - %t", capitalize(guard.ChatTypeNoun(chanInfo.chatType)), title, channelID, chanInfo.CanScan(), chanInfo.CanClean() && pc.AllowClean)
+		msg.InlineButtons = [][]guard.InlineButton{buttons}
+	}
+	if err := d.telegramBot.SendMessage(ctx, msg); err != nil {
+		d.log.Errorf("can't send connection result: %s", err)
 	}
 }
 
