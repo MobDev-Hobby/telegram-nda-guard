@@ -328,3 +328,44 @@ func TestMembershipUpdateBackfillsLegacyAdderNameOnlyForSameActor(t *testing.T) 
 	assert.Equal(t, int64(44), storage.records[testChannelID].AddedBy)
 	assert.Equal(t, "Artem", storage.records[testChannelID].AddedByName)
 }
+
+func TestLatestScanKeepsFinishedResultAfterFailedRefresh(t *testing.T) {
+	d, _, _, _, _ := newMiniAppDomain(t, true)
+	scan, _ := scanUser(t, d, 1)
+	ended := time.Now()
+	d.scansMutex.Lock()
+	d.scans["failed"] = &scanJob{view: ScanView{ID: "failed", ChannelID: testChannelID, State: ScanStateFailed, StartedAt: ended.Add(time.Second), FinishedAt: &ended}}
+	d.scansMutex.Unlock()
+	latest, err := d.GetChannelScan(context.Background(), testChannelID, "latest")
+	require.NoError(t, err)
+	assert.Equal(t, scan.ID, latest.ID)
+	d.scansMutex.Lock()
+	d.scans["running"] = &scanJob{view: ScanView{ID: "running", ChannelID: testChannelID, State: ScanStateRunning, StartedAt: ended.Add(2 * time.Second)}}
+	d.scansMutex.Unlock()
+	latest, err = d.GetChannelScan(context.Background(), testChannelID, "latest")
+	require.NoError(t, err)
+	assert.Equal(t, "running", latest.ID)
+}
+
+func TestWhitelistChangeDoesNotRepublishInvalidatedHealth(t *testing.T) {
+	env := newWhitelistDomain(t)
+	ctx := context.Background()
+	scan, _ := scanUser(t, env.d, 1)
+	_, err := env.d.AddToWhitelist(ctx, testChannelID, scan.ID, []int64{1}, "approved", 0, testAdminID)
+	require.NoError(t, err)
+	env.d.invalidateChannelScans(testChannelID)
+	cleanSummary := processors.CheckSummary{At: env.clock.now(), Good: 5}
+	env.d.recordCheck(ctx, testChannelID, cleanSummary)
+	require.NoError(t, env.d.RemoveWhitelistEntry(ctx, testChannelID, 1, testAdminID))
+	channel, err := env.d.GetChannel(ctx, testChannelID)
+	require.NoError(t, err)
+	assert.Equal(t, &cleanSummary, channel.Health.LastCheck)
+	cached, err := env.d.GetChannelScan(ctx, testChannelID, scan.ID)
+	require.NoError(t, err)
+	assert.True(t, cached.ReadOnly)
+	for _, user := range cached.Users {
+		if user.ID == 1 {
+			assert.Equal(t, UserStatusBad, user.Status)
+		}
+	}
+}

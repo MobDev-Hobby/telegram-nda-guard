@@ -11,6 +11,17 @@ import (
 
 const scanDisplayTTL = 24 * time.Hour
 
+func scanStateRank(state string) int {
+	switch state {
+	case ScanStateRunning:
+		return 2
+	case ScanStateDone:
+		return 1
+	default:
+		return 0
+	}
+}
+
 func scanReadOnly(view ScanView) bool {
 	return view.FinishedAt != nil && time.Since(*view.FinishedAt) > scanJobTTL
 }
@@ -104,7 +115,7 @@ func (d *Domain) syncWhitelistScans(ctx context.Context, channelID int64) {
 				}
 			}
 		}
-		if latest == nil || job.view.StartedAt.After(latest.view.StartedAt) {
+		if !job.view.ReadOnly && !scanReadOnly(job.view) && (latest == nil || job.view.StartedAt.After(latest.view.StartedAt)) {
 			latest = job
 		}
 	}

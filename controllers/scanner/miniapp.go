@@ -521,7 +521,8 @@ func (d *Domain) GetChannelScan(_ context.Context, channelID int64, scanID strin
 			if candidate.view.ChannelID != channelID {
 				continue
 			}
-			if !ok || (candidate.view.State == ScanStateRunning && job.view.State != ScanStateRunning) || (candidate.view.State == job.view.State && candidate.view.StartedAt.After(job.view.StartedAt)) || (job.view.State != ScanStateRunning && candidate.view.StartedAt.After(job.view.StartedAt)) {
+			if !ok || scanStateRank(candidate.view.State) > scanStateRank(job.view.State) ||
+				(scanStateRank(candidate.view.State) == scanStateRank(job.view.State) && candidate.view.StartedAt.After(job.view.StartedAt)) {
 				job, ok = candidate, true
 			}
 		}
