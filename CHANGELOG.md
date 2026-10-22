@@ -29,6 +29,8 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-10-22
+
 ### Added
 
 - Per-channel bot notification mode and summary interval in Mini App Settings:
