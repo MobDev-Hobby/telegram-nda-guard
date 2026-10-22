@@ -29,6 +29,60 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ## [Unreleased]
 
+### Added
+
+- Per-channel bot notification mode and summary interval in Mini App Settings:
+  `all`, `violations_summary`, `violations_only`, with 1–168 hour intervals.
+  `ChannelSettings.Notifications` / `ChannelView.Notifications` use
+  `processors.NotificationOptions`. Scheduled reports persist `LastNotifiedAt`;
+  muting a report does not skip checks or cleaning. Rights alerts are throttled,
+  and private manager/control-chat reminders are deduplicated.
+- Persisted chat identity and attribution (`Title`, `ChatType`, `AddedBy`,
+  `AddedByName`, `AddedAt`) in scanner/storage protected-channel records.
+  Names, chat IDs and who added the bot are visible even with insufficient
+  permissions. `guard.ChatShared` now carries the title/username requested by
+  the Telegram chat picker; known chats retain demoted/member bots too.
+- Channel connections publish `ChannelView.Connecting` immediately, refresh
+  only that chat's Telegram rights in the background, and show a loader.
+- `GetChannelScan(ctx, channelID, "latest")` returns the current/latest cached
+  scan, including bot-side scans. The Mini App restores it with a timestamp.
+  Snapshots remain visible for 24 hours; after 30 minutes `ScanView.ReadOnly`
+  disables actions, with the same limit enforced server-side.
+
+### Fixed
+
+- Administrators can be explicitly whitelisted without becoming kickable;
+  whitelist changes immediately reconcile cached scans and channel health.
+  Manual kicks also check current administrators in case someone was promoted
+  after the scan.
+- Serialize channel add/merge/persist with manager/settings writes so a stale
+  record cannot discard a concurrently joined manager. The Mini App recovers
+  `not_joined` by registering the already-authorized administrator and retrying
+  the original request once; admin authorization remains mandatory. Late tab
+  responses no longer replace the current panel.
+- Rename the cleanup option to **Hide history from removed member**. It maps
+  to Telegram `banChatMember.revoke_messages`, revoking the removed member's
+  access to history, rather than deleting their posts for everyone. Telegram
+  always applies it in supergroups and channels; their switch is fixed on.
+  Reference: https://core.telegram.org/bots/api#banchatmember.
+
+### Migration
+
+- Existing channel records load without changes. When `Notifications` is
+  absent, the new default is **only when there are issues, at most once per
+  24 hours**, including failed checks and partial scans. Choose `all` to retain
+  informational action messages and clean summaries. Summaries run after the
+  existing scheduled checks; this setting does not change scan frequency.
+- Custom `UserReportProcessor` implementations must respect an empty
+  `AccessReport.ReportChannels` (no outgoing summary, still perform cleaning)
+  and may use the additive `ViolationsOnly` flag for concise issue reports.
+- No MiniAppService method or platform endpoint allowlist changes: the latest
+  scan uses the existing `GET /api/miniapp/channels/*/scans/*` route.
+- Old connections without recorded attribution display an explicit unknown
+  actor and their chat ID; subsequent membership updates/picker selections
+  record names. No Telegram history is fabricated.
+- Client regression tests: `node --test controllers/scanner/webapi/miniapp_ui_test.cjs`.
+
 ## [0.4.0] — 2026-09-25
 
 Both batches below ship in this release.

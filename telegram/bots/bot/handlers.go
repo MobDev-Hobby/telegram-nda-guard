@@ -13,7 +13,8 @@ func castMessage(message *models.Message) *guard.MessageReceived {
 	var chatShared *guard.ChatShared
 	if message.ChatShared != nil {
 		chatShared = &guard.ChatShared{
-			ChatID:    message.ChatShared.ChatID,
+			ChatID: message.ChatShared.ChatID,
+			Title:  message.ChatShared.Title, Username: message.ChatShared.Username,
 			RequestID: int(message.ChatShared.RequestID),
 		}
 	}

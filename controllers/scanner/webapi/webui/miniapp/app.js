@@ -17,6 +17,18 @@
       authFailed: "Не удалось войти: ",
       error: "Ошибка: ",
       channelsTitle: "Ваши каналы",
+      connecting: "Подключаем… проверяем права бота",
+      addedBy: (name, id) => `Добавил: ${name || "id " + id}`,
+      addedUnknown: "Кто добавил: нет данных (старое подключение)",
+      cachedScan: (date) => `Сохранённый результат · ${date}`,
+      staleScan: "Результат старше 30 минут или состав изменился. Для действий запустите новый скан.",
+      loadingScan: "Загружаем последний результат…",
+      noJoined: "Не удалось восстановить управление. Вернитесь в список и присоединитесь к каналу.",
+      notificationsTitle: "Уведомления по этому чату",
+      notificationsModes: { all: "Все", violations_summary: "Только если есть нарушения", violations_only: "Только нарушения" },
+      notificationsHint: "Все — полные сводки и сообщения о действиях. Только если есть нарушения — сводки при нарушениях, ошибках проверки или неполном скане. Только нарушения — кратко о проблемах. Сводки приходят после плановых проверок, не чаще выбранного интервала. Проверки и автоочистка работают независимо от уведомлений.",
+      summaryEvery: "Периодичность сводок",
+      summaryHours: (n) => `Не чаще раза в ${n} ч.`,
       channelsHint: "Защищённые каналы и группы, где вы администратор.",
       noChannels: "Пока нет каналов",
       noChannelsHint: "Подключите канал ниже или добавьте его через бота.",
@@ -25,9 +37,9 @@
       joinHint: "Вы админ, но ещё не управляете каналом в боте",
       joined: (t) => `Вы присоединились к «${t}»`,
       availableTitle: "Доступны для подключения",
-      availableHint: "Бот уже админ в этих чатах, но защита не включена. Отчёты будут приходить вам в личку.",
+      availableHint: "Бот уже админ в этих чатах, но защита не включена. Уведомления о проблемах будут приходить вам в личку.",
       connect: "Подключить",
-      connectConfirm: (t) => `Включить защиту «${t}»? Отчёты будут приходить вам в личку с ботом.`,
+      connectConfirm: (t) => `Включить защиту «${t}»? Уведомления о проблемах будут приходить вам в личку с ботом.`,
       addViaBot: "Добавить канал или группу через бота",
       health: {
         ok: (d) => `всё в порядке · проверен ${d}`,
@@ -99,11 +111,11 @@
       resolved: (ok, all) => `Готово: ${ok} из ${all}.`,
       selectPassing: "Отметить прошедших проверку",
       groupAutomation: "Автоматизация", groupCleaning: "Как удалять", groupJoins: "Заявки на вступление", groupAudit: "Журнал действий",
-      autoScan: "Автосканирование", autoScanHint: "Периодически проверять участников и присылать отчёт в управляющий чат.",
+      autoScan: "Автосканирование", autoScanHint: "Периодически проверять участников. Отправка сводок настраивается ниже.",
       autoClean: "Автоочистка", autoCleanHint: "Периодически удалять тех, кто не проходит проверку, без подтверждения.",
       allowClean: "Разрешить ручную чистку", allowCleanHint: "Разрешить /clean и удаление из этого приложения.",
       keepBanned: "Оставлять в бане", keepBannedHint: "Удалённый не сможет вернуться по ссылке-приглашению.",
-      cleanMessages: "Удалять сообщения", cleanMessagesHint: "Удалить сообщения удаляемого участника.",
+      cleanMessages: "Скрывать историю у удалённого участника", cleanMessagesHint: "Закрыть удалённому участнику доступ к истории чата. Не удаляет его сообщения у остальных. Для супергрупп и каналов Telegram применяет это всегда.",
       cleanUnknown: "Удалять непроверенных", cleanUnknownHint: "Автоочистка удаляет и тех, кого не удалось проверить.",
       joinModes: { off: "Выкл", auto: "Авто", manual: "Вручную" },
       joinModeHint: {
@@ -142,6 +154,18 @@
       authFailed: "Sign-in failed: ",
       error: "Error: ",
       channelsTitle: "Your channels",
+      connecting: "Connecting… checking bot permissions",
+      addedBy: (name, id) => `Added by: ${name || "id " + id}`,
+      addedUnknown: "Added by: unavailable (older connection)",
+      cachedScan: (date) => `Saved result · ${date}`,
+      staleScan: "This result is over 30 minutes old or membership changed. Run a new scan to take actions.",
+      loadingScan: "Loading the latest result…",
+      noJoined: "Could not restore management. Return to the list and join the channel.",
+      notificationsTitle: "Notifications for this chat",
+      notificationsModes: { all: "All", violations_summary: "Only when there are issues", violations_only: "Issues only" },
+      notificationsHint: "All: full summaries and action messages. Only when there are issues: summaries for violations, failed checks or partial scans. Issues only: concise problem reports. Summaries follow scheduled checks, at most once per chosen interval. Checks and automatic cleaning run independently of notifications.",
+      summaryEvery: "Summary frequency",
+      summaryHours: (n) => `At most once every ${n} h`,
       channelsHint: "Protected channels and groups you administer.",
       noChannels: "No channels yet",
       noChannelsHint: "Connect one below or add it via the bot.",
@@ -152,7 +176,7 @@
       availableTitle: "Available to connect",
       availableHint: "The bot is already an admin here, but protection is off. Reports will come to your private chat.",
       connect: "Connect",
-      connectConfirm: (t) => `Protect “${t}”? Reports will come to your private chat with the bot.`,
+      connectConfirm: (t) => `Protect “${t}”? Issue notifications will come to your private chat with the bot.`,
       addViaBot: "Add a channel or group via the bot",
       health: {
         ok: (d) => `all good · checked ${d}`,
@@ -224,11 +248,11 @@
       resolved: (ok, all) => `Done: ${ok} of ${all}.`,
       selectPassing: "Tick everyone passing",
       groupAutomation: "Automation", groupCleaning: "How to remove", groupJoins: "Join requests", groupAudit: "Action log",
-      autoScan: "Auto scan", autoScanHint: "Check members periodically and report to the control chat.",
+      autoScan: "Auto scan", autoScanHint: "Check members periodically. Configure summaries below.",
       autoClean: "Auto clean", autoCleanHint: "Periodically remove members who fail the check, without asking.",
       allowClean: "Allow manual clean", allowCleanHint: "Allow /clean and removing from this app.",
       keepBanned: "Keep banned", keepBannedHint: "Removed members can't come back via an invite link.",
-      cleanMessages: "Delete messages", cleanMessagesHint: "Delete the removed member's messages.",
+      cleanMessages: "Hide history from removed member", cleanMessagesHint: "Revoke the removed member's access to chat history. Does not delete their posts for others. Telegram always applies this in supergroups and channels.",
       cleanUnknown: "Remove unchecked", cleanUnknownHint: "Auto clean also removes members whose check failed.",
       joinModes: { off: "Off", auto: "Auto", manual: "Manual" },
       joinModeHint: {
@@ -287,6 +311,7 @@
   // ---------- state & Telegram chrome ----------
 
   const app = document.getElementById("app");
+  const joinFlights = new Map();
   let session = null; // {token, userId, privileged, botUsername}
   let mainHandler = null;
   let backHandler = null;
@@ -367,7 +392,7 @@
     session = data;
   }
 
-  async function api(path, { method = "GET", body } = {}, retried = false) {
+  async function api(path, { method = "GET", body } = {}, retried = false, rejoined = false) {
     const res = await fetch(API + path, {
       method,
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.token },
@@ -376,10 +401,17 @@
     if (res.status === 401 && !retried) {
       // Sessions are short (the employee check repeats on sign-in).
       await signIn();
-      return api(path, { method, body }, true);
+      return api(path, { method, body }, true, rejoined);
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ApiError(data.error || res.statusText, res.status, data.code);
+    const channelPath = /^channels\/(-?\d+)(?:\/|$)/.exec(path);
+    if (res.status === 403 && data.code === "not_joined" && channelPath && !path.endsWith("/join") && !rejoined) {
+      const id = channelPath[1];
+      if (!joinFlights.has(id)) joinFlights.set(id, api(`channels/${id}/join`, { method: "POST" }, false, true).finally(() => joinFlights.delete(id)));
+      await joinFlights.get(id);
+      return api(path, { method, body }, retried, true);
+    }
+    if (!res.ok) throw new ApiError(data.code === "not_joined" ? T.noJoined : data.error || res.statusText, res.status, data.code);
     return data;
   }
 
@@ -444,7 +476,9 @@
     stopPolling();
     setBack(null);
     setMainButton(null);
+    const gen = pollGen;
     const [channels, available] = await Promise.all([api("channels"), api("available").catch(() => [])]);
+    if (gen !== pollGen) return;
     // Joined channels first, the ones needing attention on top.
     const severity = { red: 0, yellow: 1, green: 2 };
     channels.sort((a, b) => (Number(!a.joined) - Number(!b.joined))
@@ -466,6 +500,9 @@
       for (const c of available) {
         const connect = button(T.connect, "link", async () => {
           if (!(await confirmMsg(T.connectConfirm(c.title)))) return;
+          connect.disabled = true;
+          connect.setAttribute("aria-busy", "true");
+          connect.replaceChildren(el("span", { className: "spinner", attrs: { "aria-hidden": "true" } }), text(T.connecting));
           await requestWriteAccess();
           try {
             await api(`available/${c.id}/connect`, { method: "POST" });
@@ -478,7 +515,7 @@
         });
         avail.append(el("li", { className: "row" }, [
           dot("grey"),
-          el("span", { className: "row-main" }, [text(c.title, "row-title"), text(isChannel(c) ? T.kindChannel : T.kindGroup, "row-sub")]),
+          el("span", { className: "row-main" }, [text(c.title || String(c.id), "row-title"), text(`${isChannel(c) ? T.kindChannel : T.kindGroup} · ID ${c.id}`, "row-sub"), text(c.addedBy ? T.addedBy(c.addedByName, c.addedBy) : T.addedUnknown, "row-sub"), c.status && c.status !== "administrator" ? text(T.warnNotAdmin, "row-sub") : null]),
           connect,
         ]));
       }
@@ -494,6 +531,7 @@
       ]));
     }
     app.replaceChildren(el("section", {}, nodes));
+    if (channels.some((ch) => ch.connecting)) pollTimer = setTimeout(() => showChannels().catch(showError), POLL_MS);
   }
 
   function healthText(h) {
@@ -505,11 +543,12 @@
 
   function channelRow(ch) {
     const sub = [isChannel(ch) ? T.kindChannel : T.kindGroup];
-    if (!ch.joined) sub.push(T.joinHint);
+    if (ch.connecting) sub.push(T.connecting);
+    else if (!ch.joined) sub.push(T.joinHint);
     else if (!ch.botOnChannel) sub.push(T.warnNotAdmin);
     else sub.push(healthText(ch.health));
 
-    const main = el("span", { className: "row-main" }, [text(ch.title, "row-title"), text(sub.join(" · "), "row-sub")]);
+    const main = el("span", { className: "row-main" }, [text(ch.title || String(ch.id), "row-title"), text(sub.join(" · ") + ` · ID ${ch.id}`, "row-sub"), text(ch.addedBy ? T.addedBy(ch.addedByName, ch.addedBy) : T.addedUnknown, "row-sub")]);
     if (!ch.joined) {
       const joinBtn = button(T.join, "link", async () => {
         await requestWriteAccess();
@@ -526,7 +565,7 @@
       return el("li", { className: "row disabled" }, [dot("grey"), main, joinBtn]);
     }
     const item = el("button", { type: "button", className: "item" }, [
-      el("span", { className: "row" }, [dot(ch.health.status, healthText(ch.health)), main, text("›", "muted")]),
+      el("span", { className: "row" }, [ch.connecting ? el("span", { className: "spinner", attrs: { role: "status", "aria-label": T.connecting } }) : dot(ch.health.status, healthText(ch.health)), main, text("›", "muted")]),
     ]);
     item.addEventListener("click", () => showChannel(ch.id).catch(showError));
     return el("li", {}, [item]);
@@ -547,7 +586,8 @@
     tabs.push(["settings", T.tabSettings]);
 
     const warnings = [];
-    if (!channel.botOnChannel) warnings.push(notice(T.warnNotAdmin, true));
+    if (channel.connecting) warnings.push(notice(T.connecting));
+    else if (!channel.botOnChannel) warnings.push(notice(T.warnNotAdmin, true));
     else if (!channel.botCanClean) warnings.push(notice(T.warnCannotClean, true));
     if (joinsOn && channel.botOnChannel && !channel.botCanInvite) warnings.push(notice(T.warnCannotInvite, true));
 
@@ -567,7 +607,10 @@
         b.tabIndex = k === key ? 0 : -1;
       }
       const render = { scan: renderScanIdle, joins: renderJoins, whitelist: renderWhitelist, settings: renderSettings }[key];
-      Promise.resolve(render(panel, channel)).catch((err) => panel.replaceChildren(notice(T.error + err.message, true)));
+      const content = el("div");
+      panel.replaceChildren(content);
+      const gen = pollGen;
+      Promise.resolve(render(content, channel)).catch((err) => { if (gen === pollGen) content.replaceChildren(notice(T.error + err.message, true)); });
     }
     tabBar.addEventListener("keydown", (e) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -585,6 +628,7 @@
         text(isChannel(channel) ? T.kindChannel : T.kindGroup, "badge"),
       ]),
       el("p", { className: "muted", textContent: healthText(h) }),
+      el("p", { className: "muted", textContent: `ID ${channel.id} · ${channel.addedBy ? T.addedBy(channel.addedByName, channel.addedBy) : T.addedUnknown}` }),
       ...warnings,
       tabBar,
       panel,
@@ -594,17 +638,31 @@
 
   // ---------- members (scan) ----------
 
-  function renderScanIdle(panel, channel) {
+  async function renderScanIdle(panel, channel) {
+    const gen = pollGen;
+    panel.replaceChildren(notice(T.loadingScan));
+    try {
+      const scan = await api(`channels/${channel.id}/scans/latest`);
+      if (gen !== pollGen) return;
+      if (scan.state === "running") { pollScan(panel, channel, scan.id); return; }
+      if (scan.state === "done") { renderScanResult(panel, channel, scan); return; }
+    } catch (err) { if (gen !== pollGen) return; if (err.status !== 404) throw err; }
     const start = button(T.scanStart, "primary", () => startScan(panel, channel));
     start.disabled = !channel.botOnChannel;
     panel.replaceChildren(el("div", { className: "stack" }, [el("p", { className: "muted", textContent: T.scanIntro }), start]));
   }
 
   async function startScan(panel, channel) {
+    stopPolling();
+    const gen = pollGen;
+    setMainButton(null);
+    renderScanRunning(panel, { stats: {} });
     try {
       const scan = await api(`channels/${channel.id}/scans`, { method: "POST" });
+      if (gen !== pollGen) return;
       pollScan(panel, channel, scan.id);
     } catch (err) {
+      if (gen !== pollGen) return;
       panel.replaceChildren(notice(T.scanFailed + err.message, true));
     }
   }
@@ -670,9 +728,13 @@
   function renderScanResult(panel, channel, scan) {
     const users = scan.users || [];
     const selected = new Set();
-    const canKick = channel.allowClean && channel.botCanClean;
-    const canWhitelist = Boolean(channel.whitelistEnabled);
-    const selectable = (u) => (canKick || canWhitelist) && !u.protected && u.status !== "kicked";
+    const canKick = !scan.readOnly && channel.allowClean && channel.botCanClean;
+    const canWhitelist = !scan.readOnly && Boolean(channel.whitelistEnabled);
+    const kickable = (u) => canKick && !u.protected && !u.whitelist && u.status !== "kicked";
+    const whitelistable = (u) => canWhitelist && (!u.protected || u.note === "administrator") && !u.whitelist && u.status !== "kicked";
+    const selectable = (u) => kickable(u) || whitelistable(u);
+    const selectedKick = () => users.filter((u) => selected.has(u.id) && kickable(u)).map((u) => u.id);
+    const selectedWhitelist = () => users.filter((u) => selected.has(u.id) && whitelistable(u)).map((u) => u.id);
     let filter = users.some((u) => u.status === "bad") ? "bad" : "all";
     let query = "";
 
@@ -710,7 +772,7 @@
         updateActions();
       });
       const recheck = el("button", { type: "button", className: "icon", textContent: "↻", title: T.recheck, attrs: { "aria-label": `${T.recheck}: ${personName(u)}` } });
-      recheck.hidden = u.status === "kicked";
+      recheck.hidden = scan.readOnly || u.status === "kicked";
       recheck.addEventListener("click", async () => {
         recheck.setAttribute("aria-busy", "true");
         try {
@@ -741,14 +803,14 @@
     }
 
     function updateActions() {
-      wlButton.hidden = !canWhitelist || selected.size === 0;
-      wlButton.textContent = T.wlAddButton(selected.size);
-      if (!canKick || selected.size === 0) setMainButton(null);
-      else setMainButton(T.kickButton(selected.size), kick, { destructive: true });
+      wlButton.hidden = selectedWhitelist().length === 0;
+      wlButton.textContent = T.wlAddButton(selectedWhitelist().length);
+      if (selectedKick().length === 0) setMainButton(null);
+      else setMainButton(T.kickButton(selectedKick().length), kick, { destructive: true });
     }
 
     function openWhitelistForm() {
-      const ids = [...selected];
+      const ids = selectedWhitelist();
       const ttl = termSelect(false);
       const noteInput = el("textarea", { maxLength: 500, attrs: { "aria-label": T.wlNote } });
       const submit = button(T.wlSubmit, "primary", async () => {
@@ -778,7 +840,8 @@
     }
 
     async function kick() {
-      const ids = [...selected];
+      const ids = selectedKick();
+      if (!ids.length) return;
       if (!(await confirmMsg(T.kickConfirm(ids.length, channel.title)))) return;
       if (tg) tg.MainButton.showProgress(false);
       try {
@@ -808,6 +871,8 @@
     bar.children[0].hidden = bar.children[1].hidden = !canKick && !canWhitelist;
 
     panel.replaceChildren(el("div", { className: "stack" }, [
+      notice(T.cachedScan(formatDateTime(scan.finishedAt || scan.startedAt))),
+      scan.readOnly ? notice(T.staleScan, true) : null,
       scan.partial ? notice(T.partial(scan.stats.fetched, scan.stats.total), true) : null,
       channel.allowClean ? null : notice(T.noClean),
       legend(["good", "whitelisted", "unknown", "bad"]),
@@ -1009,13 +1074,19 @@
   ];
 
   async function renderSettings(panel, channel) {
+    const gen = pollGen;
     const initial = Object.fromEntries(SWITCHES.map(([, k]) => [k, Boolean(channel[k])]));
+    const fixedHistory = channel.chatType === "channel" || channel.chatType === "supergroup";
+    if (fixedHistory) initial.cleanMessages = true;
     initial.joinRequests = channel.joinRequests || "off";
+    initial.notificationMode = channel.notifications?.mode || "violations_summary";
+    initial.notificationHours = channel.notifications?.intervalHours || 24;
     const current = { ...initial };
     const groups = { automation: el("div"), cleaning: el("div") };
 
     for (const [group, key] of SWITCHES) {
       const input = el("input", { type: "checkbox", checked: current[key], name: key, attrs: { role: "switch" } });
+      if (key === "cleanMessages" && fixedHistory) input.disabled = true;
       input.addEventListener("change", () => {
         current[key] = input.checked;
         updateSave();
@@ -1027,6 +1098,14 @@
       el("fieldset", {}, [el("legend", { textContent: T.groupAutomation }), groups.automation]),
       el("fieldset", {}, [el("legend", { textContent: T.groupCleaning }), groups.cleaning]),
     ];
+
+    const notifyMode = el("select", { attrs: { "aria-label": T.notificationsTitle } });
+    for (const [value, label] of Object.entries(T.notificationsModes)) notifyMode.append(el("option", { value, textContent: label, selected: value === current.notificationMode }));
+    notifyMode.addEventListener("change", () => { current.notificationMode = notifyMode.value; updateSave(); });
+    const interval = el("select", { attrs: { "aria-label": T.summaryEvery } });
+    for (const hours of [...new Set([1, 6, 12, 24, 72, 168, current.notificationHours])].sort((a,b) => a-b)) interval.append(el("option", { value: String(hours), textContent: T.summaryHours(hours), selected: hours === current.notificationHours }));
+    interval.addEventListener("change", () => { current.notificationHours = Number(interval.value); updateSave(); });
+    fieldsets.push(el("fieldset", {}, [el("legend", { textContent: T.notificationsTitle }), el("div", { className: "stack notification-settings" }, [notifyMode, text(T.notificationsHint, "muted"), el("label", {}, [text(T.summaryEvery), interval])])]));
 
     if (channel.joinRequestsEnabled) {
       const hint = el("div", { className: "hint-row" });
@@ -1064,11 +1143,14 @@
     async function save() {
       if (tg) tg.MainButton.showProgress(false);
       try {
-        const updated = await api(`channels/${channel.id}/settings`, { method: "PUT", body: current });
+        const { notificationMode, notificationHours, ...settings } = current;
+        settings.notifications = { mode: notificationMode, intervalHours: notificationHours };
+        const updated = await api(`channels/${channel.id}/settings`, { method: "PUT", body: settings });
         Object.assign(channel, updated);
         haptic("success");
+        if (tg) tg.MainButton.hideProgress();
         // The Requests tab depends on the mode: rebuild the channel screen.
-        await showChannel(channel.id, "settings");
+        if (gen === pollGen) await showChannel(channel.id, "settings");
       } catch (err) {
         haptic("error");
         await alertMsg(T.error + err.message);

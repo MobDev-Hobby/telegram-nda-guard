@@ -81,14 +81,8 @@ func (d *Domain) checkChannelsWorker(ctx context.Context) {
 
 			// Bot is not ready
 			if err := d.CheckPermissions(ctx, request); err != nil {
-				for _, commandChannelID := range request.channelInfo.commandChannelIDs {
-					_ = d.telegramBot.SendMessage(
-						ctx,
-						&guard.Message{
-							ChatID: commandChannelID,
-							Text:   fmt.Sprintf("Skip channel scan due error: %s", err.Error()),
-						},
-					)
+				if pc, ok := d.getProtectedChannel(request.channelInfo.id); ok {
+					d.notifyRightsIssue(ctx, pc, "scan_rights", "Cannot scan: check the bot's permissions.")
 				}
 				continue
 			}
@@ -181,7 +175,18 @@ func (d *Domain) ProcessRequest(ctx context.Context, request ScanRequest) {
 		report.DeniedUsers = append(report.DeniedUsers, userReport)
 	}
 	d.recordRequestCheck(ctx, protectedChannel, request.requestType, report)
-	request.reportProcessor.ProcessReport(ctx, report)
+	if request.requestType == Scan || request.requestType == AutoScan {
+		d.cacheReport(ctx, request.channelInfo, report)
+	}
+	if request.requestType == AutoScan || request.requestType == AutoClean {
+		d.scheduledReport(ctx, protectedChannel, &report)
+	}
+	if request.reportProcessor != nil {
+		request.reportProcessor.ProcessReport(ctx, report)
+	}
+	if request.requestType == Clean || request.requestType == AutoClean {
+		d.invalidateChannelScans(request.channelInfo.id)
+	}
 	d.log.Debugf("done check for channel [%d]%s", request.channelInfo.id, request.channelInfo.title)
 }
 

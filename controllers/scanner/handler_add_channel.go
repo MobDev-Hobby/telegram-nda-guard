@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"html"
 	"strings"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
@@ -104,7 +105,10 @@ func (d *Domain) AddChannelCallbackHandler(
 	d.log.Debugf("processed get ID for chat: %d", update.Message.ChatID)
 
 	protectedChannel := &ProtectedChannel{
-		ID:                update.Message.ChatShared.ChatID,
+		ID:      update.Message.ChatShared.ChatID,
+		Title:   update.Message.ChatShared.Title,
+		AddedBy: update.Message.User.ID, AddedByName: strings.TrimSpace(update.Message.User.FirstName + " " + update.Message.User.LastName), AddedAt: d.now(),
+		Managers:          []int64{update.Message.User.ID},
 		CommandChannelIDs: []int64{update.Message.ChatID},
 		AutoScan:          true,
 		AllowClean:        true,
@@ -123,10 +127,7 @@ func (d *Domain) AddChannelCallbackHandler(
 		return
 	}
 
-	err = d.CheckRights(ctx)
-	if err != nil {
-		d.log.Errorf("can't check rights: %v", err)
-	}
+	d.refreshConnectedChat(protectedChannel.ID)
 
 	if pc, ok := d.getProtectedChannel(update.Message.ChatShared.ChatID); ok {
 		d.NoteUserName(update.Message.User.ID, strings.TrimSpace(update.Message.User.FirstName+" "+update.Message.User.LastName))
@@ -166,7 +167,7 @@ func (d *Domain) AddChannelCallbackHandler(
 		&guard.Message{
 			ChatID:   update.Message.ChatID,
 			ThreadID: update.Message.ThreadID,
-			Text:     "Wait...",
+			Text:     "Channel registered. Checking permissions…",
 			Buttons:  d.getDefaultButtons(),
 		},
 	)
@@ -183,7 +184,7 @@ func (d *Domain) AddChannelCallbackHandler(
 			Text: fmt.Sprintf(
 				"%s <b>%s</b> added! \nCheck permissions:\n • Scan - %t\n • Clean - %t",
 				capitalize(guard.ChatTypeNoun(chanInfo.chatType)),
-				chanInfo.title,
+				html.EscapeString(d.channelTitle(protectedChannel.ID)),
 				chanInfo.CanScan(),
 				chanInfo.CanClean() && protectedChannel.AllowClean,
 			),

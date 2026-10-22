@@ -76,7 +76,8 @@ type ChannelSettings struct {
 	CleanMessages bool `json:"cleanMessages"`
 	CleanUnknown  bool `json:"cleanUnknown"`
 	// JoinRequests is the join request mode: off, auto or manual.
-	JoinRequests string `json:"joinRequests"`
+	JoinRequests  string                          `json:"joinRequests"`
+	Notifications *processors.NotificationOptions `json:"notifications,omitempty"`
 }
 
 // ScannedUser is one member in a scan result. Phone numbers are deliberately
@@ -113,6 +114,7 @@ const noteWhitelisted = "whitelisted"
 
 // ScanView is the state of a scan started from the Mini App.
 type ScanView struct {
+	ReadOnly  bool   `json:"readOnly"`
 	ID        string `json:"id"`
 	ChannelID int64  `json:"channelId"`
 	Title     string `json:"title"`
@@ -204,6 +206,9 @@ type scanJob struct {
 
 // SetChannelSettings implements MiniAppService.
 func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settings ChannelSettings, callerID int64) error {
+	if err := validateNotifications(settings.Notifications); err != nil {
+		return err
+	}
 	if !validJoinMode(settings.JoinRequests) {
 		return ErrBadJoinMode
 	}
@@ -212,6 +217,10 @@ func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settin
 	}
 	err := d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
 		pc.JoinRequestMode = settings.JoinRequests
+		if settings.Notifications != nil {
+			opts := *settings.Notifications
+			pc.Notifications = &opts
+		}
 		pc.AutoScan = settings.AutoScan
 		pc.AutoClean = settings.AutoClean
 		pc.AllowClean = settings.AllowClean
@@ -230,7 +239,7 @@ func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settin
 		Details: map[string]any{
 			"autoScan": settings.AutoScan, "autoClean": settings.AutoClean, "allowClean": settings.AllowClean,
 			"keepBanned": settings.KeepBanned, "cleanMessages": settings.CleanMessages, "cleanUnknown": settings.CleanUnknown,
-			"joinRequests": settings.JoinRequests,
+			"joinRequests": settings.JoinRequests, "notifications": settings.Notifications,
 		},
 	}, fmt.Sprintf("Settings of %s changed by %s.", html.EscapeString(d.channelTitle(channelID)), actorLink(callerID, d.userName(callerID))))
 	return nil
@@ -445,6 +454,10 @@ func (d *Domain) RecheckScannedUser(ctx context.Context, channelID int64, scanID
 		d.scansMutex.Unlock()
 		return ScannedUser{}, ErrScanNotFound
 	}
+	if job.view.ReadOnly || scanReadOnly(job.view) {
+		d.scansMutex.Unlock()
+		return ScannedUser{}, ErrScanNotFound
+	}
 	user, ok := job.users[userID]
 	d.scansMutex.Unlock()
 	if !ok {
@@ -501,10 +514,22 @@ func (d *Domain) GetChannelScan(_ context.Context, channelID int64, scanID strin
 	defer d.scansMutex.Unlock()
 	d.expireScansLocked()
 	job, ok := d.scans[scanID]
+	if scanID == "latest" {
+		ok = false
+		for _, candidate := range d.scans {
+			if candidate.view.ChannelID != channelID {
+				continue
+			}
+			if !ok || (candidate.view.State == ScanStateRunning && job.view.State != ScanStateRunning) || (candidate.view.State == job.view.State && candidate.view.StartedAt.After(job.view.StartedAt)) || (job.view.State != ScanStateRunning && candidate.view.StartedAt.After(job.view.StartedAt)) {
+				job, ok = candidate, true
+			}
+		}
+	}
 	if !ok || job.view.ChannelID != channelID {
 		return ScanView{}, ErrScanNotFound
 	}
 	view := job.view
+	view.ReadOnly = view.ReadOnly || scanReadOnly(view)
 	view.Users = append([]ScannedUser(nil), job.view.Users...)
 	return view, nil
 }
@@ -553,6 +578,10 @@ func (d *Domain) KickScannedUsers(
 		d.scansMutex.Unlock()
 		return nil, ErrScanNotFinished
 	}
+	if job.view.ReadOnly || scanReadOnly(job.view) {
+		d.scansMutex.Unlock()
+		return nil, ErrScanNotFound
+	}
 	statusByID := make(map[int64]ScannedUser, len(job.view.Users))
 	for _, u := range job.view.Users {
 		statusByID[u.ID] = u
@@ -577,9 +606,22 @@ func (d *Domain) KickScannedUsers(
 	}
 	d.scansMutex.Unlock()
 
+	// Membership/roles can change after the scan. Never kick a newly promoted admin.
+	admins, err := d.telegramBot.GetChatAdministrators(ctx, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("can't verify current administrators: %w", err)
+	}
+	protectedNow := map[int64]bool{d.telegramBot.UserID(): true, d.userBot.UserID(): true}
+	for _, id := range admins {
+		protectedNow[id] = true
+	}
 	// The scan may predate a whitelist entry added since (another session).
 	allowed := toKick[:0]
 	for _, u := range toKick {
+		if protectedNow[u.ID] {
+			results = append(results, processors.KickResult{UserID: u.ID, Error: "protected: administrator or bot"})
+			continue
+		}
 		if _, listed := d.whitelistEntry(ctx, channelID, u.ID); listed {
 			results = append(results, processors.KickResult{UserID: u.ID, Error: "protected: whitelisted"})
 			continue
@@ -669,7 +711,7 @@ func (d *Domain) reportManualKick(ctx context.Context, pc ProtectedChannel, chan
 func (d *Domain) expireScansLocked() {
 	now := time.Now()
 	for id, job := range d.scans {
-		if job.view.FinishedAt != nil && now.Sub(*job.view.FinishedAt) > scanJobTTL {
+		if job.view.FinishedAt != nil && now.Sub(*job.view.FinishedAt) > scanDisplayTTL {
 			delete(d.scans, id)
 		}
 	}

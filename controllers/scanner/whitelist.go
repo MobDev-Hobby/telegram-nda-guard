@@ -228,7 +228,7 @@ func (d *Domain) AddToWhitelist(
 
 	d.scansMutex.Lock()
 	job, ok := d.scans[scanID]
-	if !ok || job.view.ChannelID != channelID {
+	if !ok || job.view.ChannelID != channelID || job.view.State != ScanStateDone || job.view.ReadOnly || scanReadOnly(job.view) {
 		d.scansMutex.Unlock()
 		return nil, ErrScanNotFound
 	}
@@ -244,7 +244,7 @@ func (d *Domain) AddToWhitelist(
 		if !found {
 			return nil, fmt.Errorf("user %d is not in this scan", id)
 		}
-		if u.Protected && u.Note != noteWhitelisted {
+		if u.Protected && u.Note != noteWhitelisted && u.Note != "administrator" {
 			return nil, fmt.Errorf("user %d is %s and needs no whitelist", id, u.Note)
 		}
 	}
@@ -274,18 +274,7 @@ func (d *Domain) AddToWhitelist(
 		added = append(added, d.entryView(entry))
 	}
 
-	// Reflect it in the scan the admin is looking at.
-	d.scansMutex.Lock()
-	if job, ok := d.scans[scanID]; ok {
-		for i := range job.view.Users {
-			for _, e := range added {
-				if job.view.Users[i].ID == e.UserID {
-					markWhitelisted(&job.view.Users[i], e.Entry, now)
-				}
-			}
-		}
-	}
-	d.scansMutex.Unlock()
+	d.syncWhitelistScans(ctx, channelID)
 
 	users := make([]audit.User, 0, len(added))
 	names := make([]string, 0, len(added))
@@ -350,6 +339,7 @@ func (d *Domain) RenewWhitelistEntry(ctx context.Context, channelID, userID int6
 	if err := d.putWhitelistEntry(ctx, channelID, entry); err != nil {
 		return WhitelistEntryView{}, err
 	}
+	d.syncWhitelistScans(ctx, channelID)
 	d.recordAudit(ctx, pc, audit.Event{
 		ActorID: callerID, Action: audit.ActionWhitelistRenewed, Users: []audit.User{auditUser(entry)}, Note: note,
 		Details: whitelistDetails(entry.ExpiresAt, entry.DeleteAt),
@@ -380,6 +370,7 @@ func (d *Domain) RemoveWhitelistEntry(ctx context.Context, channelID, userID, ca
 	d.whitelistMutex.Lock()
 	delete(d.whitelists[channelID], userID)
 	d.whitelistMutex.Unlock()
+	d.syncWhitelistScans(ctx, channelID)
 	d.recordAudit(ctx, pc, audit.Event{
 		ActorID: callerID, Action: audit.ActionWhitelistRemoved, Users: []audit.User{auditUser(entry)},
 	}, fmt.Sprintf("<b>Whitelist of %s</b>\n\n%s removed by %s. They are checked as usual from the next scan.",
@@ -553,6 +544,9 @@ func (d *Domain) channelTitle(channelID int64) string {
 	if ch, ok := d.getChannel(channelID); ok && ch.title != "" {
 		return ch.title
 	}
+	if pc, ok := d.getProtectedChannel(channelID); ok && pc.Title != "" {
+		return pc.Title
+	}
 	return fmt.Sprintf("%d", channelID)
 }
 
@@ -603,6 +597,7 @@ func (d *Domain) removeEndedEntries(ctx context.Context, pc ProtectedChannel, en
 	if len(users) == 0 {
 		return
 	}
+	d.syncWhitelistScans(ctx, pc.ID)
 	d.recordAudit(ctx, pc, audit.Event{
 		Action: audit.ActionWhitelistRemoved, Users: users,
 		Details: map[string]any{"reason": "term_ended"},

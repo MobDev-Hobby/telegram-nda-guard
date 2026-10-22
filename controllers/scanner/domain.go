@@ -58,6 +58,8 @@ type Domain struct {
 	defaultCleanOptions processors.CleanOptions
 	miniAppURL          string
 	miniAppShortName    string
+	notificationMutex   sync.Mutex
+	noticeTimes         map[int64]map[string]time.Time
 	scansMutex          sync.Mutex
 	scans               map[string]*scanJob
 
@@ -126,6 +128,7 @@ func New(
 		processRequestChan: make(chan ScanRequest, 10),
 		ready:              make(chan struct{}),
 		scans:              make(map[string]*scanJob),
+		noticeTimes:        make(map[int64]map[string]time.Time),
 
 		whitelistTTL:          DefaultWhitelistTTL,
 		whitelistRemindBefore: DefaultWhitelistRemindBefore,

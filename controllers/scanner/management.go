@@ -2,6 +2,8 @@ package scanner
 
 import (
 	"context"
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
 )
@@ -14,16 +16,21 @@ import (
 // bot's actual rights in the channel as resolved from the Telegram API; they
 // are not persisted and may change between calls.
 type ChannelView struct {
-	ID           int64   `json:"id"`
-	Title        string  `json:"title"`
-	ChatType     string  `json:"chatType"`
-	CommandChats []int64 `json:"commandChats"`
-	AutoScan     bool    `json:"autoScan"`
-	AutoClean    bool    `json:"autoClean"`
-	AllowClean   bool    `json:"allowClean"`
-	BotOnChannel bool    `json:"botOnChannel"`
-	BotCanInvite bool    `json:"botCanInvite"`
-	BotCanClean  bool    `json:"botCanClean"`
+	AddedBy       int64                          `json:"addedBy,omitempty"`
+	AddedByName   string                         `json:"addedByName,omitempty"`
+	AddedAt       *time.Time                     `json:"addedAt,omitempty"`
+	Connecting    bool                           `json:"connecting"`
+	Notifications processors.NotificationOptions `json:"notifications"`
+	ID            int64                          `json:"id"`
+	Title         string                         `json:"title"`
+	ChatType      string                         `json:"chatType"`
+	CommandChats  []int64                        `json:"commandChats"`
+	AutoScan      bool                           `json:"autoScan"`
+	AutoClean     bool                           `json:"autoClean"`
+	AllowClean    bool                           `json:"allowClean"`
+	BotOnChannel  bool                           `json:"botOnChannel"`
+	BotCanInvite  bool                           `json:"botCanInvite"`
+	BotCanClean   bool                           `json:"botCanClean"`
 	// Effective clean options: the channel's own when set, else the defaults.
 	KeepBanned    bool `json:"keepBanned"`
 	CleanMessages bool `json:"cleanMessages"`

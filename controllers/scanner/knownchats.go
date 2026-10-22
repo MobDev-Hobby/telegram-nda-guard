@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"sort"
+	"strings"
 	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
@@ -39,23 +40,58 @@ func (d *Domain) loadKnownChats(ctx context.Context) {
 		d.knownChats[c.ID] = c
 	}
 	d.knownMutex.Unlock()
+	for _, c := range chats {
+		if _, ok := d.getProtectedChannel(c.ID); !ok {
+			continue
+		}
+		_ = d.updateProtectedChannel(ctx, c.ID, func(pc *ProtectedChannel) {
+			if pc.Title == "" {
+				pc.Title = c.Title
+			}
+			if pc.ChatType == "" {
+				pc.ChatType = c.Type
+			}
+			if pc.AddedBy == 0 {
+				pc.AddedBy, pc.AddedByName, pc.AddedAt = c.AddedBy, c.AddedByName, c.AddedAt
+			}
+		})
+		d.channelsMutex.Lock()
+		ch := d.channels[c.ID]
+		if ch.title == "" {
+			ch.title = c.Title
+		}
+		if ch.chatType == "" {
+			ch.chatType = c.Type
+		}
+		d.channels[c.ID] = ch
+		d.channelsMutex.Unlock()
+	}
 }
 
-// BotMembershipHandler tracks where the bot is an administrator, from
+// BotMembershipHandler tracks chats containing the bot, including ones still
+// waiting for administrator rights, from
 // my_chat_member updates.
 func (d *Domain) BotMembershipHandler(ctx context.Context, update *guard.Update) {
 	m := update.MyChatMember
-	if m == nil || d.knownChatStorage == nil || m.Chat.Type == guard.ChatTypePrivate {
+	if m == nil || m.Chat.Type == guard.ChatTypePrivate {
 		return
 	}
 	storeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if m.Status != guard.MemberStatusAdministrator {
+	if m.Status == guard.MemberStatusLeft || m.Status == guard.MemberStatusKicked {
 		d.knownMutex.Lock()
 		delete(d.knownChats, m.Chat.ID)
 		d.knownMutex.Unlock()
-		if err := d.knownChatStorage.DropKnownChat(storeCtx, m.Chat.ID); err != nil {
-			d.log.Errorf("can't forget chat %d: %s", m.Chat.ID, err)
+		d.channelsMutex.Lock()
+		if ch, ok := d.channels[m.Chat.ID]; ok {
+			ch.botOnChannel, ch.botCanClean, ch.botCanInvite = false, false, false
+			d.channels[m.Chat.ID] = ch
+		}
+		d.channelsMutex.Unlock()
+		if d.knownChatStorage != nil {
+			if err := d.knownChatStorage.DropKnownChat(storeCtx, m.Chat.ID); err != nil {
+				d.log.Errorf("can't forget chat %d: %s", m.Chat.ID, err)
+			}
 		}
 		return
 	}
@@ -64,17 +100,42 @@ func (d *Domain) BotMembershipHandler(ctx context.Context, update *guard.Update)
 		Title:              m.Chat.Title,
 		Type:               m.Chat.Type,
 		AddedBy:            m.From.ID,
+		AddedByName:        strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
+		Status:             m.Status,
 		AddedAt:            d.now(),
 		CanRestrictMembers: m.CanRestrictMembers,
 		CanInviteUsers:     m.CanInviteUsers,
 	}
 	d.knownMutex.Lock()
+	if old, ok := d.knownChats[chat.ID]; ok {
+		chat.AddedBy, chat.AddedByName, chat.AddedAt = old.AddedBy, old.AddedByName, old.AddedAt
+		if chat.Title == "" {
+			chat.Title = old.Title
+		}
+	}
 	d.knownChats[chat.ID] = chat
 	d.knownMutex.Unlock()
-	if err := d.knownChatStorage.StoreKnownChat(storeCtx, chat); err != nil {
-		d.log.Errorf("can't remember chat %d: %s", chat.ID, err)
+	if d.knownChatStorage != nil {
+		if err := d.knownChatStorage.StoreKnownChat(storeCtx, chat); err != nil {
+			d.log.Errorf("can't remember chat %d: %s", chat.ID, err)
+		}
 	}
-	d.log.Infof("bot is now an administrator of %s %d (%s)", chat.Type, chat.ID, chat.Title)
+	if _, ok := d.getProtectedChannel(chat.ID); ok {
+		_ = d.updateProtectedChannel(storeCtx, chat.ID, func(pc *ProtectedChannel) {
+			pc.Title, pc.ChatType = chat.Title, chat.Type
+			if pc.AddedBy == 0 {
+				pc.AddedBy, pc.AddedByName, pc.AddedAt = chat.AddedBy, chat.AddedByName, chat.AddedAt
+			}
+		})
+		d.channelsMutex.Lock()
+		ch := d.channels[chat.ID]
+		ch.title, ch.chatType = chat.Title, chat.Type
+		ch.botOnChannel = true
+		ch.botCanClean, ch.botCanInvite = chat.CanRestrictMembers, chat.CanInviteUsers
+		d.channels[chat.ID] = ch
+		d.channelsMutex.Unlock()
+	}
+	d.log.Infof("bot membership %s in %s %d (%s)", chat.Status, chat.Type, chat.ID, chat.Title)
 }
 
 // ListAvailableChats implements MiniAppService: chats where the bot is an
@@ -98,7 +159,7 @@ func (d *Domain) ListAvailableChats(_ context.Context) ([]knownchats.Chat, error
 // bot, and the caller becomes the chat's first manager.
 func (d *Domain) ConnectChat(ctx context.Context, chatID, callerID int64) error {
 	d.knownMutex.Lock()
-	_, known := d.knownChats[chatID]
+	chat, known := d.knownChats[chatID]
 	d.knownMutex.Unlock()
 	if !known {
 		return fmt.Errorf("the bot is not an administrator of chat %d", chatID)
@@ -108,6 +169,11 @@ func (d *Domain) ConnectChat(ctx context.Context, chatID, callerID int64) error 
 	}
 	err := d.AddDefaultProtectedChannel(&ProtectedChannel{
 		ID:                chatID,
+		Title:             chat.Title,
+		ChatType:          chat.Type,
+		AddedBy:           chat.AddedBy,
+		AddedByName:       chat.AddedByName,
+		AddedAt:           chat.AddedAt,
 		CommandChannelIDs: []int64{callerID},
 		AutoScan:          true,
 		AllowClean:        true,
@@ -116,9 +182,8 @@ func (d *Domain) ConnectChat(ctx context.Context, chatID, callerID int64) error 
 	if err != nil {
 		return fmt.Errorf("protect chat %d: %w", chatID, err)
 	}
-	if err := d.CheckRights(ctx); err != nil {
-		d.log.Errorf("ConnectChat: can't check rights: %s", err)
-	}
+	d.refreshConnectedChat(chatID)
+
 	pc, _ := d.getProtectedChannel(chatID)
 	d.recordAudit(ctx, pc, audit.Event{
 		ActorID: callerID, Action: audit.ActionChannelAdded,

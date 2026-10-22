@@ -1,6 +1,9 @@
 package scanner
 
-import "github.com/MobDev-Hobby/telegram-nda-guard/processors"
+import (
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
+	"time"
+)
 
 type ChannelInfo struct {
 	migratedFrom      *int64
@@ -11,6 +14,7 @@ type ChannelInfo struct {
 	botOnChannel      bool
 	botCanInvite      bool
 	botCanClean       bool
+	connecting        bool
 }
 
 func (ci *ChannelInfo) CanScan() bool {
@@ -22,6 +26,15 @@ func (ci *ChannelInfo) CanClean() bool {
 }
 
 type ProtectedChannel struct {
+	// Identity survives Telegram lookup failures and restarts.
+	Title          string                          `json:",omitempty"`
+	ChatType       string                          `json:",omitempty"`
+	AddedBy        int64                           `json:",omitempty"`
+	AddedByName    string                          `json:",omitempty"`
+	AddedAt        time.Time                       `json:",omitempty"`
+	Notifications  *processors.NotificationOptions `json:",omitempty"`
+	LastNotifiedAt time.Time                       `json:",omitempty"`
+
 	ID                int64
 	CommandChannelIDs []int64
 	AutoScan          bool

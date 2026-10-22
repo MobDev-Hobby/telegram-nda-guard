@@ -10,13 +10,24 @@ import (
 type CleanOptions struct {
 	// KeepBanned leaves removed users banned instead of just kicking them.
 	KeepBanned bool `json:"keepBanned"`
-	// CleanMessages deletes the removed users' messages.
+	// CleanMessages revokes the removed member's access to chat history.
+	// Telegram always applies this in supergroups and channels (banChatMember).
+	// It does not delete the member's own messages for everyone.
 	CleanMessages bool `json:"cleanMessages"`
 	// CleanUnknown also removes users whose access could not be checked.
 	CleanUnknown bool `json:"cleanUnknown"`
 }
 
+// NotificationOptions controls bot messages independently of member checks.
+// Modes: all (full summaries), violations_summary (full summaries only with
+// issues), violations_only (only failing/unchecked members and partial scans).
+type NotificationOptions struct {
+	Mode          string `json:"mode"`
+	IntervalHours int    `json:"intervalHours"`
+}
+
 type AccessReport struct {
+	ViolationsOnly bool
 	Channel        guard.ChannelInfo
 	ReportChannels []int64
 	AllowedUsers   []guard.User

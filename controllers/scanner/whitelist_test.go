@@ -223,14 +223,14 @@ func TestWhitelistRenewAndRemove(t *testing.T) {
 	assert.Len(t, env.sentTexts("Whitelist of"), 4, "every change is also posted to the control chat")
 }
 
-func TestWhitelistRejectsUsersOutsideScanAndAdmins(t *testing.T) {
+func TestWhitelistRejectsUsersOutsideScanAndBots(t *testing.T) {
 	env := newWhitelistDomain(t)
 	scan, _ := scanUser(t, env.d, 1)
 	ctx := context.Background()
 
 	_, err := env.d.AddToWhitelist(ctx, testChannelID, scan.ID, []int64{12345}, "", 0, testAdminID)
 	assert.Error(t, err)
-	_, err = env.d.AddToWhitelist(ctx, testChannelID, scan.ID, []int64{1, testAdminID}, "", 0, testAdminID)
+	_, err = env.d.AddToWhitelist(ctx, testChannelID, scan.ID, []int64{1, testBotID}, "", 0, testAdminID)
 	assert.Error(t, err)
 	assert.Empty(t, env.wl.entries[testChannelID], "a bad batch writes nothing")
 	_, err = env.d.AddToWhitelist(ctx, testChannelID, "nope", []int64{1}, "", 0, testAdminID)

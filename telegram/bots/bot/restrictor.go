@@ -46,7 +46,8 @@ func (d *Domain) SendReportMessage(ctx context.Context, chatID int64, text strin
 }
 
 // Ban restricts userID in channelID. When revokeMessages is true, the user's
-// recent messages are deleted as part of the restriction.
+// access to the chat's earlier history is revoked. Telegram always applies
+// this in supergroups/channels; it does not delete the user's posts for everyone.
 func (d *Domain) Ban(ctx context.Context, channelID, userID int64, revokeMessages bool) error {
 	_, err := d.botClient.BanChatMember(
 		ctx,
