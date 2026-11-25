@@ -270,7 +270,7 @@ func TestSetChannelSettingsPersistsCleanOptions(t *testing.T) {
 	require.NotNil(t, rec.CleanOptions)
 	assert.Equal(t, processors.CleanOptions{KeepBanned: true, CleanUnknown: true}, *rec.CleanOptions)
 	assert.True(t, rec.AutoScan)
-	assert.True(t, d.channelHasTicker(testChannelID))
+	assert.True(t, d.hasSchedule(testChannelID))
 
 	view, err = d.GetChannel(context.Background(), testChannelID)
 	require.NoError(t, err)

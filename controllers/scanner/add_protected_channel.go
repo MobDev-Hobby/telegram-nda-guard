@@ -3,7 +3,7 @@ package scanner
 import (
 	"context"
 	"errors"
-	"reflect"
+	"fmt"
 	"slices"
 	"time"
 
@@ -126,29 +126,24 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 		channel = &merged
 	} else {
 		d.protectedChannels[channel.ID] = *channel
+	}
 
-		// Ticker
-		if channel.AutoScan || channel.AutoClean {
-			var tickerErr error
-			if len(opts) == 0 {
-				ticker := time.NewTicker(d.channelAutoScanInterval)
-				// registerTicker takes tickerCasesMutex; we already hold
-				// channelsMutex but tickerCasesMutex is a different lock and
-				// is never taken while holding channelsMutex elsewhere, so
-				// there is no lock-ordering deadlock.
-				tickerErr = d.registerTicker(ticker.C, channel.ID)
-			} else {
-				// applyOptions may itself take channelsMutex-free paths and
-				// register tickers; unlock to keep the critical section tight.
-				d.channelsMutex.Unlock()
-				tickerErr = d.applyOptions(opts, channel.ID)
-				d.channelsMutex.Lock()
-			}
-			if tickerErr != nil {
-				d.channelsMutex.Unlock()
-				return tickerErr
-			}
+	// Schedule. A protected channel always gets one, whatever its automation
+	// flags say right now: the ticker loop checks AutoScan/AutoClean per tick,
+	// and a schedule that comes and goes with the flags cannot survive being
+	// switched off (a caller-supplied cron would be lost for good).
+	if len(opts) > 0 {
+		// applyOptions takes scheduleMutex, a different lock; unlock
+		// channelsMutex anyway to keep the critical section tight.
+		d.channelsMutex.Unlock()
+		err := d.applyOptions(opts, channel.ID)
+		d.channelsMutex.Lock()
+		if err != nil {
+			d.channelsMutex.Unlock()
+			return err
 		}
+	} else {
+		d.ensureIntervalSchedule(channel.ID)
 	}
 
 	// Channel cache
@@ -217,20 +212,26 @@ func mergeProtectedChannel(existing, added ProtectedChannel) ProtectedChannel {
 	return merged
 }
 
+// applyOptions installs the schedule described by opts. A channel has one
+// schedule, so when several options supply one the last wins.
 func (d *Domain) applyOptions(opts []TickerOption, channelID int64) error {
+	installed := false
 	for _, opt := range opts {
 		options := &TickerOptions{}
 		err := opt(options)
 		if err != nil {
-			d.log.Errorf("Error setting ticker options: %v", err)
+			// A malformed schedule must not leave the channel silently
+			// unscheduled; it used to be logged and swallowed.
+			return fmt.Errorf("channel %d schedule: %w", channelID, err)
 		}
 		if options.tickerChan == nil {
 			continue
 		}
-		err = d.registerTicker(options.tickerChan, channelID)
-		if err != nil {
-			return err
-		}
+		d.setSchedule(channelID, &channelSchedule{kind: scheduleCustom, ch: options.tickerChan})
+		installed = true
+	}
+	if !installed {
+		d.ensureIntervalSchedule(channelID)
 	}
 	return nil
 }
@@ -265,15 +266,8 @@ func (d *Domain) MigrateChannel(migratedFromID, migratedToID int64) error {
 		d.commandChannels[commandChannelID] = controlledChannels
 	}
 
-	// migrate tickers
-	d.tickerCasesMutex.Lock()
-	defer d.tickerCasesMutex.Unlock()
-
-	for i, tickerChan := range d.tickerCasesChannels {
-		if tickerChan == oldChannel {
-			d.tickerCasesChannels[i] = newChannel.id
-		}
-	}
+	// migrate the schedule
+	d.migrateSchedule(oldChannel, newChannel.id)
 
 	return nil
 }
@@ -295,7 +289,7 @@ func (d *Domain) CleanProtectedChannel(channelID int64, commandChannelId int64) 
 	}
 
 	if len(commandChannels) == 0 {
-		d.removeTickers(channelID)
+		d.dropSchedule(channelID)
 		delete(d.protectedChannels, channelID)
 		// The channel is fully detached: also remove its persisted record so it
 		// does not reappear after a restart. Drop is idempotent.
@@ -332,52 +326,6 @@ func (d *Domain) CleanProtectedChannel(channelID int64, commandChannelId int64) 
 	d.commandChannels[commandChannelId] = controlledChannels
 
 	return nil
-}
-
-func (d *Domain) registerTicker(tickerChan <-chan time.Time, channelID int64) error {
-	d.tickerCasesMutex.Lock()
-	defer d.tickerCasesMutex.Unlock()
-
-	if len(d.tickerCases) != len(d.tickerCasesChannels) {
-		return errors.New("ticker channel count mismatch")
-	}
-
-	d.tickerCases = append(
-		d.tickerCases,
-		reflect.SelectCase{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.ValueOf(tickerChan),
-		},
-	)
-	d.tickerCasesChannels = append(d.tickerCasesChannels, channelID)
-	return nil
-}
-
-func (d *Domain) removeTickers(channelID int64) {
-	d.tickerCasesMutex.Lock()
-	defer d.tickerCasesMutex.Unlock()
-
-	for i, tickerChan := range d.tickerCasesChannels {
-		if tickerChan == channelID {
-			d.tickerCasesChannels = append(d.tickerCasesChannels[:i], d.tickerCasesChannels[i+1:]...)
-			d.tickerCases = append(d.tickerCases[:i], d.tickerCases[i+1:]...)
-			break
-		}
-	}
-}
-
-// channelHasTicker reports whether a periodic scan/clean ticker is currently
-// registered for channelID.
-func (d *Domain) channelHasTicker(channelID int64) bool {
-	d.tickerCasesMutex.Lock()
-	defer d.tickerCasesMutex.Unlock()
-
-	for _, tickerChan := range d.tickerCasesChannels {
-		if tickerChan == channelID {
-			return true
-		}
-	}
-	return false
 }
 
 // storageRecord converts a protected channel into its persisted form.

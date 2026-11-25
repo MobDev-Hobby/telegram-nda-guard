@@ -79,22 +79,12 @@ func (d *Domain) applyFlagToggle(ctx context.Context, channelID int64, flag stri
 
 	d.protectedChannels[channelID] = protectedChannel
 
-	// Keep the periodic ticker in sync with the AutoScan/AutoClean flags.
-	// Register a ticker when automation is (re)enabled and none exists yet;
-	// remove it when both automations are off. The ticker methods take their
-	// own lock (tickerCasesMutex), so we release channelsMutex first to keep
-	// lock ordering simple and avoid nested locks.
-	needsTicker := protectedChannel.AutoScan || protectedChannel.AutoClean
 	d.channelsMutex.Unlock()
 
-	hasTicker := d.channelHasTicker(channelID)
-	switch {
-	case needsTicker && !hasTicker:
-		ticker := time.NewTicker(d.channelAutoScanInterval)
-		_ = d.registerTicker(ticker.C, channelID)
-	case !needsTicker && hasTicker:
-		d.removeTickers(channelID)
-	}
+	// The schedule is not touched here. The ticker loop reads these flags on
+	// every tick, so switching automation off simply makes the channel's turn
+	// a no-op, and switching it back on resumes the channel's own schedule
+	// instead of replacing it with a fresh interval ticker.
 	d.log.Infof("toggled %s for channel %d -> autoscan=%t autoclean=%t allowclean=%t",
 		flag, channelID, protectedChannel.AutoScan, protectedChannel.AutoClean, protectedChannel.AllowClean)
 	return nil

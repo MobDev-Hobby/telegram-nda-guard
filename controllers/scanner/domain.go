@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"reflect"
 	"sync"
 	"time"
 
@@ -48,9 +47,11 @@ type Domain struct {
 	defaultCleanProcessor UserReportProcessor
 	defaultAccessChecker  CheckUserAccess
 
-	tickerCasesMutex    sync.Mutex
-	tickerCases         []reflect.SelectCase
-	tickerCasesChannels []int64
+	// scheduleMutex guards schedules. A protected channel keeps its schedule
+	// for as long as it is protected; the AutoScan/AutoClean flags are read
+	// per tick and never add or remove one.
+	scheduleMutex sync.Mutex
+	schedules     map[int64]*channelSchedule
 
 	// Mini App support: manual kicks go through userKicker, scans are kept
 	// in memory so a kick can only target users a scan actually returned.
@@ -129,6 +130,7 @@ func New(
 		ready:              make(chan struct{}),
 		scans:              make(map[string]*scanJob),
 		noticeTimes:        make(map[int64]map[string]time.Time),
+		schedules:          make(map[int64]*channelSchedule),
 
 		whitelistTTL:          DefaultWhitelistTTL,
 		whitelistRemindBefore: DefaultWhitelistRemindBefore,

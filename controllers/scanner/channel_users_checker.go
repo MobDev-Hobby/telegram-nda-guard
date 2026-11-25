@@ -198,22 +198,19 @@ func (d *Domain) RunUserAccessChecker(ctx context.Context) {
 			Chan: reflect.ValueOf(ctx.Done()),
 		}
 		for {
-			// Snapshot the ticker slices under the lock so reflect.Select
-			// does not race registerTicker/removeTickers/MigrateChannel, and
-			// build a fresh slice to avoid aliasing d.tickerCases' backing
-			// array (append below would otherwise write into shared capacity).
-			d.tickerCasesMutex.Lock()
-			cases := make([]reflect.SelectCase, 0, len(d.tickerCases)+1)
-			cases = append(cases, d.tickerCases...)
-			tickerChannels := make([]int64, len(d.tickerCasesChannels))
-			copy(tickerChannels, d.tickerCasesChannels)
-			d.tickerCasesMutex.Unlock()
+			// Snapshot the registry under its lock so reflect.Select does not
+			// race schedule changes. Cases and ids come from one pass, so the
+			// index used below always refers to the same channel.
+			cases, tickerChannels := d.scheduleCases()
 			cases = append(cases, contextDone)
 
 			selected, _, ok := reflect.Select(cases)
 			// ctx.Done is the last case
 			if selected == len(cases)-1 {
 				d.log.Infof("context done, terminating user access checker")
+				// Release the interval tickers the controller owns; without
+				// this they outlive the domain.
+				d.stopSchedules()
 				return
 			}
 			if !ok {
