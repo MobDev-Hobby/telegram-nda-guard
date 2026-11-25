@@ -153,8 +153,7 @@ func (d *Domain) addProtectedChannel(channel *ProtectedChannel, merge mergeStrat
 		// any configured schedule. A malformed one is a wiring mistake, not
 		// runtime data, so it fails the add and surfaces at startup.
 		if err := d.applyOptions(opts, record.ID); err != nil {
-			d.channelsMutex.Lock()
-			d.channelsMutex.Unlock()
+			// channelsMutex is already released here; nothing to unwind.
 			return err
 		}
 	} else if err := d.installSchedule(record.ID); err != nil {
