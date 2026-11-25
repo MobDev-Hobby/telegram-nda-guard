@@ -23,6 +23,10 @@ type ProtectedChannel struct {
 	// CleanOptions overrides the cleaner defaults for this channel. Absent in
 	// records written by older versions, which then keep using the defaults.
 	CleanOptions *processors.CleanOptions `json:",omitempty"`
+	// ScanSchedule overrides the service's default scan schedule for this
+	// channel. Absent in records written by older versions, which then keep
+	// using the default.
+	ScanSchedule *processors.ScanSchedule `json:",omitempty"`
 	// Managers are the users who joined the channel in the bot (Mini App);
 	// they manage it and get its reminders.
 	Managers []int64 `json:",omitempty"`

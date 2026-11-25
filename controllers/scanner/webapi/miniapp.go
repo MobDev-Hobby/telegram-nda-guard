@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner"
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 )
 
 // ChannelAuthorizer decides which channels a Mini App user may see.
@@ -147,7 +148,8 @@ func (s *Server) handleMiniAppChannels(w http.ResponseWriter, r *http.Request) {
 //
 //	POST {id}/join                                join the channel in the bot
 //	GET  {id}                                     channel with its settings
-//	PUT  {id}/settings                            replace all settings
+//	PUT  {id}/settings                            change settings (omitted switches keep their value)
+//	PUT  {id}/schedule                            set when the channel is scanned
 //	POST {id}/scans                               start a scan (or join the running one)
 //	GET  {id}/scans/{scanId}                      scan progress and result
 //	POST {id}/scans/{scanId}/users/{userId}/recheck  run the checker again for one user
@@ -209,6 +211,28 @@ func (s *Server) handleMiniAppChannel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.log.Infof("webapi: user %d changed settings of %d: %+v", callerID, channelID, settings)
+		ch, err := s.miniApp.GetChannel(ctx, channelID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, MiniAppChannel{ChannelView: ch, Joined: true})
+
+	case sub == "schedule" && r.Method == http.MethodPut:
+		// An absent or null "schedule" clears the override, so the channel
+		// falls back to the service default.
+		var body struct {
+			Schedule *processors.ScanSchedule `json:"schedule"`
+		}
+		if err := decodeJSON(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if err := s.miniApp.SetChannelSchedule(ctx, channelID, body.Schedule, callerID); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.log.Infof("webapi: user %d changed the scan schedule of %d: %+v", callerID, channelID, body.Schedule)
 		ch, err := s.miniApp.GetChannel(ctx, channelID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())

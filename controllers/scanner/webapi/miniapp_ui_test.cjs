@@ -130,3 +130,59 @@ test('connect immediately shows a disabled loading row while the API is pending'
   await pending;
   c.stopPolling();
 });
+
+test('scan schedule and summary time are saved on their own endpoints', async () => {
+  const requests = [];
+  const channel = { id:-100, title:'Test', chatType:'supergroup', health:{status:'green', reason:'ok'},
+    botOnChannel:true, botCanClean:true, allowClean:true,
+    notifications:{mode:'violations_summary', intervalHours:24},
+    scanSchedule:{at:'13:05', weekdays:[1,2,3,4,5], tz:'Europe/Moscow'},
+    customScanSchedule:true, scanScheduleTz:'Europe/Moscow', scanScheduleText:'13:05, Monday..Friday' };
+  const c = client(async (url, req) => {
+    if (url.includes('/audit')) return response(200, []);
+    if (req && req.method === 'PUT') { requests.push({ url, body: JSON.parse(req.body) }); return response(200, channel); }
+    return response(200, channel);
+  });
+  const panel = new Element('div');
+  await c.renderSettings(panel, channel);
+  const elements = descendants(panel);
+
+  // The controls open on the schedule in force, not on an empty form.
+  const scanAt = elements.find((el) => el.tag === 'select' && el.attrs['aria-label'] === 'Время сканирования');
+  const reportAt = elements.find((el) => el.tag === 'select' && el.attrs['aria-label'] === 'Время ежедневной сводки');
+  assert.ok(scanAt.children.some((o) => o.value === '13:05' && o.selected));
+  const days = elements.filter((el) => el.tag === 'input' && el.attrs['aria-label'] && ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].includes(el.attrs['aria-label']));
+  assert.equal(days.length, 7);
+  assert.deepEqual(days.filter((d) => d.checked).map((d) => d.attrs['aria-label']).sort(), ['Вт','Пн','Пт','Ср','Чт']);
+
+  // Move the scan to 09:30 and release the summary at 09:00.
+  scanAt.value = '09:30'; scanAt.events.change();
+  reportAt.value = '09:00'; reportAt.events.change();
+  await c.main()();
+
+  const settings = requests.find((r) => r.url.endsWith('/settings'));
+  const schedule = requests.find((r) => r.url.endsWith('/schedule'));
+  assert.deepEqual(settings.body.notifications, { mode:'violations_summary', intervalHours:24, at:'09:00' });
+  assert.equal(settings.body.scanAt, undefined, 'the schedule is not part of the settings payload');
+  assert.deepEqual(schedule.body, { schedule: { at:'09:30', weekdays:[1,2,3,4,5] } });
+});
+
+test('clearing the scan time falls back to the default schedule', async () => {
+  const requests = [];
+  const channel = { id:-100, title:'Test', chatType:'supergroup', health:{status:'green', reason:'ok'},
+    botOnChannel:true, botCanClean:true, allowClean:true,
+    notifications:{mode:'all', intervalHours:24},
+    scanSchedule:{at:'13:05', weekdays:[], tz:'UTC'}, customScanSchedule:true, scanScheduleTz:'UTC' };
+  const c = client(async (url, req) => {
+    if (url.includes('/audit')) return response(200, []);
+    if (req && req.method === 'PUT') { requests.push({ url, body: JSON.parse(req.body) }); return response(200, channel); }
+    return response(200, channel);
+  });
+  const panel = new Element('div');
+  await c.renderSettings(panel, channel);
+  const scanAt = descendants(panel).find((el) => el.tag === 'select' && el.attrs['aria-label'] === 'Время сканирования');
+  scanAt.value = ''; scanAt.events.change();
+  await c.main()();
+  const schedule = requests.find((r) => r.url.endsWith('/schedule'));
+  assert.deepEqual(schedule.body, { schedule: null });
+});

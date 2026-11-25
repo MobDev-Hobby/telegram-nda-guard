@@ -91,6 +91,7 @@ func TestVerifyWebAppInitData(t *testing.T) {
 type fakeMiniApp struct {
 	channels   map[int64]scanner.ChannelView
 	settings   map[int64]scanner.ChannelSettings
+	schedules  map[int64]*processors.ScanSchedule
 	kicked     []int64
 	whitelist  []scanner.WhitelistEntryView
 	managers   map[int64][]int64
@@ -205,6 +206,16 @@ func (f *fakeMiniApp) JoinChannel(_ context.Context, channelID, userID int64) er
 	f.managers[channelID] = append(f.managers[channelID], userID)
 	return nil
 }
+func (f *fakeMiniApp) SetChannelSchedule(_ context.Context, channelID int64, schedule *processors.ScanSchedule, _ int64) error {
+	if schedule != nil && schedule.At == "bad" {
+		return errors.New("invalid schedule")
+	}
+	f.schedules[channelID] = schedule
+	c := f.channels[channelID]
+	c.ScanSchedule = schedule
+	f.channels[channelID] = c
+	return nil
+}
 func (f *fakeMiniApp) ListAudit(_ context.Context, _ int64, limit int) ([]audit.Event, error) {
 	f.auditLimit = limit
 	return []audit.Event{{Action: audit.ActionUsersKicked, ActorID: 5}}, nil
@@ -226,8 +237,9 @@ func newMiniAppServer(t *testing.T) (*Server, *fakeMiniApp) {
 			-100: {ID: -100, Title: "Mine"},
 			-200: {ID: -200, Title: "Someone else's"},
 		},
-		settings: map[int64]scanner.ChannelSettings{},
-		managers: map[int64][]int64{-100: {5}},
+		settings:  map[int64]scanner.ChannelSettings{},
+		schedules: map[int64]*processors.ScanSchedule{},
+		managers:  map[int64][]int64{-100: {5}},
 	}
 	s, err := New(newFakeService(), fakeAuth{allowedID: 42}, testBotToken,
 		[]byte("01234567890123456789012345678901"), WithMiniApp(app, fakeChannelAuth{}))
@@ -549,4 +561,33 @@ func TestSessionKindsAreNotInterchangeable(t *testing.T) {
 
 	// Control: the right kinds work.
 	assert.Equal(t, http.StatusOK, miniAppRequest(s, 5, http.MethodGet, "/api/miniapp/channels", "").Code)
+}
+
+func TestMiniAppSetSchedule(t *testing.T) {
+	s, app := newMiniAppServer(t)
+	rec := miniAppRequest(s, 5, http.MethodPut, "/api/miniapp/channels/-100/schedule",
+		`{"schedule":{"at":"09:30","weekdays":[1,2,3,4,5],"tz":"Europe/Moscow"}}`)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, app.schedules[-100])
+	assert.Equal(t, "09:30", app.schedules[-100].At)
+	assert.Equal(t, "Europe/Moscow", app.schedules[-100].TZ)
+
+	// An absent schedule clears the override.
+	rec = miniAppRequest(s, 5, http.MethodPut, "/api/miniapp/channels/-100/schedule", `{}`)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Nil(t, app.schedules[-100])
+}
+
+func TestMiniAppSetScheduleRejectsBad(t *testing.T) {
+	s, _ := newMiniAppServer(t)
+	rec := miniAppRequest(s, 5, http.MethodPut, "/api/miniapp/channels/-100/schedule",
+		`{"schedule":{"at":"bad"}}`)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestMiniAppSetScheduleNeedsChannelAdmin(t *testing.T) {
+	s, _ := newMiniAppServer(t)
+	rec := miniAppRequest(s, 5, http.MethodPut, "/api/miniapp/channels/-200/schedule",
+		`{"schedule":{"at":"09:30"}}`)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
 }

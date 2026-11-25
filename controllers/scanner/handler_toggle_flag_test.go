@@ -73,6 +73,11 @@ func newTestDomain(t *testing.T, storage *memoryStorage) *Domain {
 		channels:                map[int64]ChannelInfo{},
 		commandChannels:         map[int64][]int64{},
 		channelAutoScanInterval: time.Hour, // valid duration; ticker path covered separately
+		schedules:               map[int64]*channelSchedule{},
+		// New() sets these; a hand-built Domain needs them for any path that
+		// records an audit event or a notification.
+		now:         time.Now,
+		noticeTimes: map[int64]map[string]time.Time{},
 	}
 	return d
 }

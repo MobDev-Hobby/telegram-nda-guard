@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
@@ -52,6 +53,16 @@ type Domain struct {
 	// per tick and never add or remove one.
 	scheduleMutex sync.Mutex
 	schedules     map[int64]*channelSchedule
+
+	// cron is the one scheduler shared by every cron-scheduled channel, with
+	// a zone-qualified entry per channel. It is created on first use.
+	cronMutex sync.Mutex
+	cron      *cron.Cron
+	// defaultScanSchedule applies to channels without their own. nil keeps
+	// the channelAutoScanInterval ticker.
+	defaultScanSchedule *processors.ScanSchedule
+	// scheduleTZ is the zone a schedule is read in when it names none.
+	scheduleTZ string
 
 	// Mini App support: manual kicks go through userKicker, scans are kept
 	// in memory so a kick can only target users a scan actually returned.

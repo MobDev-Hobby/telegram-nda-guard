@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -149,6 +150,9 @@ type MiniAppService interface {
 	GetChannel(ctx context.Context, channelID int64) (ChannelView, error)
 	// SetChannelSettings replaces every per-channel setting at once.
 	SetChannelSettings(ctx context.Context, channelID int64, settings ChannelSettings, callerID int64) error
+	// SetChannelSchedule sets when the channel is scanned; nil falls back to
+	// the service default.
+	SetChannelSchedule(ctx context.Context, channelID int64, schedule *processors.ScanSchedule, callerID int64) error
 	// StartChannelScan lists and classifies the channel's members in the
 	// background. A scan already running for the channel is returned instead
 	// of starting another.
@@ -266,6 +270,50 @@ func applyBool(target *bool, value *bool) {
 	if value != nil {
 		*target = *value
 	}
+}
+
+// SetChannelSchedule implements MiniAppService: it sets when a channel is
+// scanned. A nil schedule clears the override and the channel falls back to
+// the service default.
+//
+// The schedule is validated and the new cron entry built before anything is
+// persisted, so a schedule the host cannot honour is refused rather than
+// stored and silently ignored.
+func (d *Domain) SetChannelSchedule(ctx context.Context, channelID int64, schedule *processors.ScanSchedule, callerID int64) error {
+	if _, ok := d.getProtectedChannel(channelID); !ok {
+		return fmt.Errorf("channel %d not found", channelID)
+	}
+	var stored *processors.ScanSchedule
+	if schedule != nil {
+		if err := validateSchedule(*schedule, d.scheduleTZ); err != nil {
+			return err
+		}
+		copied := *schedule
+		copied.Weekdays = slices.Clone(schedule.Weekdays)
+		stored = &copied
+	}
+
+	if err := d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
+		pc.ScanSchedule = stored
+	}); err != nil {
+		return err
+	}
+	// reinstallSchedule reads the record we just wrote, so it picks up either
+	// the new schedule or the default the channel fell back to. An explicit
+	// change replaces whatever the channel had.
+	if err := d.reinstallSchedule(channelID); err != nil {
+		return err
+	}
+
+	pc, _ := d.getProtectedChannel(channelID)
+	d.recordAudit(ctx, pc, audit.Event{
+		ActorID: callerID, Action: audit.ActionSettingsChanged,
+		Details: map[string]any{"scanSchedule": stored},
+	}, fmt.Sprintf("Scan schedule of %s changed by %s: %s.",
+		html.EscapeString(d.channelTitle(channelID)),
+		actorLink(callerID, d.userName(callerID)),
+		html.EscapeString(d.describeScheduleOf(pc))))
+	return nil
 }
 
 // StartChannelScan implements MiniAppService.

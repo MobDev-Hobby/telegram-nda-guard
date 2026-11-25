@@ -29,6 +29,88 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ## [Unreleased]
 
+### Added
+
+- Configurable scan time and daily summary time, per channel and per service.
+  `processors.ScanSchedule{At, Weekdays, TZ}` is a time of day (`HH:MM`), the
+  weekdays it applies to (empty = every day) and an IANA zone.
+  `WithDefaultScanSchedule` sets the service default and
+  `WithScheduleTimeZone` the zone a schedule is read in when it names none
+  (then UTC, never the host's local zone). A channel overrides the default
+  through `ScanSchedule` on `scanner.ProtectedChannel` /
+  `channels.ProtectedChannel`, `MiniAppService.SetChannelSchedule`, or
+  `PUT /api/miniapp/channels/{id}/schedule` (`{"schedule": null}` clears it).
+  `ChannelView` reports the effective schedule in `ScanSchedule`,
+  `CustomScanSchedule`, `ScanScheduleText` and `ScanScheduleTZ`. Schedules
+  compile to one `CRON_TZ=`-prefixed entry per channel on one shared
+  scheduler, so changing a schedule takes effect without a restart.
+- `processors.NotificationOptions.At` releases the summary at a time of day
+  instead of every `IntervalHours`: at most one summary a day from that time
+  on. A scan before it still reports when nothing has gone out since the
+  previous release, so a channel only scanned early never goes silent. An
+  empty `At` keeps the interval behaviour. Set it in Mini App Settings →
+  Notifications; the scan time and weekdays are in Settings → Schedule.
+- `Domain.StopCron` stops the shared scheduler.
+
+### Changed
+
+- `ChannelSettings` switches (`AutoScan`, `AutoClean`, `AllowClean`,
+  `KeepBanned`, `CleanMessages`, `CleanUnknown`) are `*bool`, and an empty
+  `JoinRequests` means "unchanged". A settings request that omits a field no
+  longer reads as an explicit `false` and switches that automation off.
+  Cleaning options start from the channel's own values, or the configured
+  defaults when it has none, rather than from the zero value.
+- Persisted channel records win over records the application configured
+  (e.g. an env `CHANNELS` list) when `Run` restores them: the stored record
+  holds what the operator last chose. Control chats and managers remain the
+  union of both. Previously a restart undid an operator's changes.
+- A channel's schedule no longer depends on `AutoScan`/`AutoClean`. It is
+  installed when the channel becomes protected and removed only when the
+  channel stops being protected; the ticker loop reads the flags per tick.
+- An invalid `TickerOption` fails `AddProtectedChannel` instead of being
+  logged and ignored, which left the channel protected but never scanned.
+
+### Deprecated
+
+- `WithCron` — it starts an unstoppable scheduler per channel and reads the
+  expression in the host's local zone. Use `WithDefaultScanSchedule` or a
+  per-channel `ScanSchedule`.
+
+### Fixed
+
+- A channel could lose a caller-supplied cron schedule for good. The schedule
+  registry stored only an anonymous `<-chan time.Time` per channel, so it
+  could not tell a cron schedule from an interval ticker it had built itself.
+  Switching automation off deleted the schedule and switching it back on
+  replaced it with `time.NewTicker(channelAutoScanInterval)`; the channel kept
+  being scanned, but on a rolling interval instead of its cron, until a
+  restart. `updateProtectedChannel` ran the same sync, so seven callers that
+  only refresh bookkeeping (channel title, `LastNotifiedAt`, health summary,
+  connection status, managers, known chats) could destroy a schedule as a side
+  effect of an unrelated write.
+- `removeTickers` deleted only the first schedule registered for a channel,
+  and the registry's two parallel slices could drift apart. Schedules are a
+  map keyed by channel id, and `reflect.Select`'s cases and ids are built in
+  one pass.
+- Interval tickers leaked: the `*time.Ticker` was dropped on the floor, so it
+  could never be stopped and every rebuild left another one running. Schedules
+  keep their stop func and are released when the checker loop sees `ctx.Done`.
+
+### Migration
+
+- `MiniAppService` gained `SetChannelSchedule(ctx, channelID, *processors.ScanSchedule, callerID) error`.
+  Every implementation must add it, including test doubles.
+- `ChannelSettings`' six switches are now `*bool`. Callers that build the
+  struct in Go need `utils.Ptr(true)` / `utils.Ptr(false)`; a field left nil
+  is no longer a `false`. JSON clients are unaffected except that omitting a
+  field now preserves it.
+- Nothing is required to keep the previous scheduling behaviour: without
+  `WithDefaultScanSchedule`, channels stay on the `WithChannelAutoScanInterval`
+  ticker. To move a service off `WithCronScheduledChannel`, drop the per-channel
+  cron options and pass `WithScheduleTimeZone` + `WithDefaultScanSchedule`.
+- Storage is backwards compatible: records without `ScanSchedule` or
+  `Notifications.At` load and keep using the service default.
+
 ## [0.5.0] — 2026-10-22
 
 ### Added

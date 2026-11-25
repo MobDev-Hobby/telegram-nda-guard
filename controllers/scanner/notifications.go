@@ -28,6 +28,11 @@ func validateNotifications(opts *processors.NotificationOptions) error {
 	if opts == nil {
 		return nil
 	}
+	if opts.At != "" {
+		if _, _, err := parseTimeOfDay(opts.At); err != nil {
+			return fmt.Errorf("summary time: %w", err)
+		}
+	}
 	switch opts.Mode {
 	case NotificationAll, NotificationViolationsSummary, NotificationViolationsOnly:
 	default:
@@ -49,8 +54,35 @@ func (d *Domain) scheduledReport(ctx context.Context, pc ProtectedChannel, repor
 		report.ReportChannels = nil
 		return
 	}
+	// With a report time set, at most one summary is released per day, from
+	// that time on. A scan before it still reports when nothing has gone out
+	// since the previous release: withholding would mean a channel only ever
+	// scanned before its report time never reported at all.
+	//
+	// Without a report time the summary is throttled to one per
+	// IntervalHours, counted from the last one - which depends on when scans
+	// happened rather than on the clock.
+	var boundary time.Time
+	if opts.At != "" {
+		at, err := reportBoundary(opts.At, d.scheduleLocationOf(pc), d.now())
+		if err != nil {
+			// A stored time that no longer parses must not silence the
+			// channel; fall back to the interval.
+			d.log.Errorf("channel %d report time %q: %s", pc.ID, opts.At, err)
+		} else {
+			boundary = at
+		}
+	}
+
 	due := false
 	err := d.updateProtectedChannel(ctx, pc.ID, func(current *ProtectedChannel) {
+		if !boundary.IsZero() {
+			if current.LastNotifiedAt.Before(boundary) {
+				current.LastNotifiedAt = d.now()
+				due = true
+			}
+			return
+		}
 		if current.LastNotifiedAt.IsZero() || d.now().Sub(current.LastNotifiedAt) >= time.Duration(opts.IntervalHours)*time.Hour {
 			current.LastNotifiedAt = d.now()
 			due = true

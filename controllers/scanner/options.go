@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
@@ -41,6 +43,40 @@ func WithCheckAccessInterval(interval time.Duration) func(*Domain) {
 	}
 	return func(d *Domain) {
 		d.accessCheckInterval = interval
+	}
+}
+
+// WithDefaultScanSchedule sets when channels without a schedule of their own
+// are scanned: a time of day, the days it applies to, and the zone the time is
+// read in. Channels keep the WithChannelAutoScanInterval ticker when no
+// schedule is configured.
+//
+// It panics on a schedule that cannot be compiled, like the other
+// configuration options here: a service that cannot schedule its channels
+// must not start up pretending it can.
+func WithDefaultScanSchedule(schedule processors.ScanSchedule) func(*Domain) {
+	return func(d *Domain) {
+		if err := validateSchedule(schedule, d.scheduleTZ); err != nil {
+			panic(fmt.Sprintf("invalid default scan schedule: %s", err))
+		}
+		s := schedule
+		s.Weekdays = slices.Clone(schedule.Weekdays)
+		d.defaultScanSchedule = &s
+	}
+}
+
+// WithScheduleTimeZone sets the zone schedules are read in when they name
+// none. Without it, times are read in UTC rather than the host's local zone,
+// which in a container is whatever the image happens to set.
+//
+// Apply it before WithDefaultScanSchedule and WithChannels so they validate
+// against the right zone.
+func WithScheduleTimeZone(tz string) func(*Domain) {
+	return func(d *Domain) {
+		if _, err := scheduleLocation(tz, DefaultScheduleTZ); err != nil {
+			panic(fmt.Sprintf("invalid schedule time zone: %s", err))
+		}
+		d.scheduleTZ = tz
 	}
 }
 

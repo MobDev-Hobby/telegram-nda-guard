@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
@@ -83,6 +84,15 @@ func (d *Domain) fillCleanOptions(v *ChannelView, pc ProtectedChannel) {
 	if v.WhitelistEnabled {
 		v.WhitelistTTLDays = int(d.whitelistTTL / (24 * time.Hour))
 	}
+	schedule, custom := d.effectiveSchedule(pc)
+	v.CustomScanSchedule = custom
+	if schedule != nil {
+		s := *schedule
+		s.Weekdays = slices.Clone(schedule.Weekdays)
+		v.ScanSchedule = &s
+	}
+	v.ScanScheduleText = d.describeScheduleOf(pc)
+	v.ScanScheduleTZ = d.scheduleLocationOf(pc).String()
 }
 
 // ListChannels implements ManagementService.

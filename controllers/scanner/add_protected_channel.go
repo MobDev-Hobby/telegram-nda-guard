@@ -32,6 +32,13 @@ func WithTickerChan(tickerChan chan time.Time) TickerOption {
 	}
 }
 
+// WithCron schedules a channel from a raw cron expression.
+//
+// Deprecated: it starts a scheduler per channel that nothing can stop, and the
+// expression is read in the host's local zone unless it carries its own
+// CRON_TZ= prefix - in a container that is whatever the image sets. Prefer
+// WithDefaultScanSchedule, or a per-channel ScanSchedule, which name their
+// zone and share one scheduler.
 func WithCron(cronString string) TickerOption {
 	return func(opts *TickerOptions) error {
 		c := cron.New()
@@ -74,6 +81,7 @@ func (d *Domain) AddDefaultProtectedChannel(pc *ProtectedChannel) error {
 		AutoClean:            pc.AutoClean,
 		AllowClean:           pc.AllowClean,
 		CleanOptions:         pc.CleanOptions,
+		ScanSchedule:         pc.ScanSchedule,
 		Managers:             pc.Managers,
 		LastCheck:            pc.LastCheck,
 		JoinRequestMode:      pc.JoinRequestMode,
@@ -136,18 +144,21 @@ func (d *Domain) addProtectedChannel(channel *ProtectedChannel, merge mergeStrat
 	// flags say right now: the ticker loop checks AutoScan/AutoClean per tick,
 	// and a schedule that comes and goes with the flags cannot survive being
 	// switched off (a caller-supplied cron would be lost for good).
-	if len(opts) > 0 {
-		// applyOptions takes scheduleMutex, a different lock; unlock
-		// channelsMutex anyway to keep the critical section tight.
-		d.channelsMutex.Unlock()
-		err := d.applyOptions(opts, channel.ID)
-		d.channelsMutex.Lock()
-		if err != nil {
-			d.channelsMutex.Unlock()
-			return err
+	// The schedule helpers take their own locks and read protectedChannels,
+	// so release channelsMutex around them.
+	d.channelsMutex.Unlock()
+	scheduleErr := func() error {
+		if len(opts) > 0 {
+			// An explicit ticker option from the embedding application wins
+			// over any configured schedule.
+			return d.applyOptions(opts, record.ID)
 		}
-	} else {
-		d.ensureIntervalSchedule(channel.ID)
+		return d.installSchedule(record.ID)
+	}()
+	d.channelsMutex.Lock()
+	if scheduleErr != nil {
+		d.channelsMutex.Unlock()
+		return scheduleErr
 	}
 
 	// Channel cache
@@ -239,6 +250,7 @@ func mergeRestoredChannel(configured, stored ProtectedChannel) ProtectedChannel 
 	merged.AutoClean = stored.AutoClean
 	merged.AllowClean = stored.AllowClean
 	merged.CleanOptions = stored.CleanOptions
+	merged.ScanSchedule = stored.ScanSchedule
 	merged.JoinRequestMode = stored.JoinRequestMode
 	merged.Notifications = stored.Notifications
 	merged.LastCheck = stored.LastCheck
@@ -293,6 +305,7 @@ func (d *Domain) restoreProtectedChannel(
 		AutoClean:         stored.AutoClean,
 		AllowClean:        stored.AllowClean,
 		CleanOptions:      stored.CleanOptions,
+		ScanSchedule:      stored.ScanSchedule,
 		Managers:          stored.Managers,
 		LastCheck:         stored.LastCheck,
 		JoinRequestMode:   stored.JoinRequestMode,
@@ -425,6 +438,12 @@ func storageRecord(pc ProtectedChannel) *channels.ProtectedChannel {
 		opts := *pc.CleanOptions
 		cleanOptions = &opts
 	}
+	var scanSchedule *processors.ScanSchedule
+	if pc.ScanSchedule != nil {
+		schedule := *pc.ScanSchedule
+		schedule.Weekdays = slices.Clone(pc.ScanSchedule.Weekdays)
+		scanSchedule = &schedule
+	}
 	return &channels.ProtectedChannel{
 		ID:                pc.ID,
 		Title:             pc.Title,
@@ -439,6 +458,7 @@ func storageRecord(pc ProtectedChannel) *channels.ProtectedChannel {
 		AutoClean:         pc.AutoClean,
 		AllowClean:        pc.AllowClean,
 		CleanOptions:      cleanOptions,
+		ScanSchedule:      scanSchedule,
 		Managers:          append([]int64(nil), pc.Managers...),
 		LastCheck:         pc.LastCheck,
 		JoinRequestMode:   pc.JoinRequestMode,

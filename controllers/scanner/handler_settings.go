@@ -133,9 +133,9 @@ func (d *Domain) SettingsChannelHandler(
 
 	err := d.telegramBot.SendMessage(
 		ctx, &guard.Message{
-			ChatID:   update.CallbackQuery.Message.ChatID,
-			ThreadID: update.CallbackQuery.Message.ThreadID,
-			Text:     text,
+			ChatID:        update.CallbackQuery.Message.ChatID,
+			ThreadID:      update.CallbackQuery.Message.ThreadID,
+			Text:          text,
 			InlineButtons: buttons,
 		},
 	)

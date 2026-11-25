@@ -89,6 +89,16 @@ func (s *svc) SetChannelSettings(_ context.Context, id int64, st scanner.Channel
 	s.log(audit.ActionSettingsChanged, nil, nil)
 	return nil
 }
+func (s *svc) SetChannelSchedule(_ context.Context, id int64, schedule *processors.ScanSchedule, _ int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := s.channels[id]
+	c.ScanSchedule = schedule
+	s.channels[id] = c
+	s.log(audit.ActionSettingsChanged, nil, nil)
+	return nil
+}
+
 func setBool(target *bool, value *bool) {
 	if value != nil {
 		*target = *value
