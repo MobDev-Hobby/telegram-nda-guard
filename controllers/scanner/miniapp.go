@@ -239,14 +239,21 @@ func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settin
 		applyBool(&pc.AutoScan, settings.AutoScan)
 		applyBool(&pc.AutoClean, settings.AutoClean)
 		applyBool(&pc.AllowClean, settings.AllowClean)
-		clean := d.defaultCleanOptions
-		if pc.CleanOptions != nil {
-			clean = *pc.CleanOptions
+		// Only give the channel its own cleaning options when the request
+		// actually sets one. Materialising them from the defaults would stop
+		// the channel tracking the service defaults for good, and would mark
+		// it as customised in the UI, over a request that never mentioned
+		// them.
+		if settings.KeepBanned != nil || settings.CleanMessages != nil || settings.CleanUnknown != nil {
+			clean := d.defaultCleanOptions
+			if pc.CleanOptions != nil {
+				clean = *pc.CleanOptions
+			}
+			applyBool(&clean.KeepBanned, settings.KeepBanned)
+			applyBool(&clean.CleanMessages, settings.CleanMessages)
+			applyBool(&clean.CleanUnknown, settings.CleanUnknown)
+			pc.CleanOptions = &clean
 		}
-		applyBool(&clean.KeepBanned, settings.KeepBanned)
-		applyBool(&clean.CleanMessages, settings.CleanMessages)
-		applyBool(&clean.CleanUnknown, settings.CleanUnknown)
-		pc.CleanOptions = &clean
 	})
 	if err != nil {
 		return err
@@ -276,20 +283,29 @@ func applyBool(target *bool, value *bool) {
 // scanned. A nil schedule clears the override and the channel falls back to
 // the service default.
 //
-// The schedule is validated and the new cron entry built before anything is
-// persisted, so a schedule the host cannot honour is refused rather than
-// stored and silently ignored.
+// The schedule is validated before anything is persisted, so one the host
+// cannot honour is refused and the channel keeps the schedule it had. The cron
+// entry is built after the record is written; validation compiles the same
+// spec, so a validated schedule installs.
 func (d *Domain) SetChannelSchedule(ctx context.Context, channelID int64, schedule *processors.ScanSchedule, callerID int64) error {
 	if _, ok := d.getProtectedChannel(channelID); !ok {
 		return fmt.Errorf("channel %d not found", channelID)
 	}
 	var stored *processors.ScanSchedule
 	if schedule != nil {
-		if err := validateSchedule(*schedule, d.scheduleTZ); err != nil {
-			return err
-		}
 		copied := *schedule
 		copied.Weekdays = slices.Clone(schedule.Weekdays)
+		if copied.TZ == "" {
+			// Keep the zone the channel is already on. A client that edits
+			// only the time and days (the bundled Mini App does) would
+			// otherwise silently move the channel to the service default, or
+			// to UTC when the service sets none.
+			pc, _ := d.getProtectedChannel(channelID)
+			copied.TZ = d.scheduleLocationOf(pc).String()
+		}
+		if err := validateSchedule(copied, d.scheduleTZ); err != nil {
+			return err
+		}
 		stored = &copied
 	}
 

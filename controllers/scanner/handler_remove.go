@@ -90,7 +90,8 @@ func (d *Domain) RemoveConfirmHandler(
 	}
 
 	title := strconv.FormatInt(channelID, 10)
-	if ch, found := d.channels[channelID]; found {
+	// d.channels is read from several goroutines; use the guarded accessor.
+	if ch, found := d.getChannel(channelID); found {
 		title = ch.title
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"slices"
 	"time"
 
@@ -147,19 +148,34 @@ func (d *Domain) addProtectedChannel(channel *ProtectedChannel, merge mergeStrat
 	// The schedule helpers take their own locks and read protectedChannels,
 	// so release channelsMutex around them.
 	d.channelsMutex.Unlock()
-	scheduleErr := func() error {
-		if len(opts) > 0 {
-			// An explicit ticker option from the embedding application wins
-			// over any configured schedule.
-			return d.applyOptions(opts, record.ID)
+	if len(opts) > 0 {
+		// An explicit ticker option from the embedding application wins over
+		// any configured schedule. A malformed one is a wiring mistake, not
+		// runtime data, so it fails the add and surfaces at startup.
+		if err := d.applyOptions(opts, record.ID); err != nil {
+			d.channelsMutex.Lock()
+			d.channelsMutex.Unlock()
+			return err
 		}
-		return d.installSchedule(record.ID)
-	}()
-	d.channelsMutex.Lock()
-	if scheduleErr != nil {
-		d.channelsMutex.Unlock()
-		return scheduleErr
+	} else if err := d.installSchedule(record.ID); err != nil {
+		// Here the channel is already protected and persisted, and the
+		// schedule came from stored or configured data: a zone missing from
+		// the image, a hand-edited record. Leaving it protected and never
+		// scanned is the failure this whole area exists to prevent, so fall
+		// back to the interval and say so loudly. The wrong cadence is
+		// recoverable; silence is not.
+		d.log.Errorf("channel %d: %s; falling back to scanning every %s",
+			record.ID, err, d.channelAutoScanInterval)
+		d.ensureIntervalSchedule(record.ID)
+		if !d.hasSchedule(record.ID) {
+			return fmt.Errorf("channel %d cannot be scheduled: %w", record.ID, err)
+		}
+		d.NotifyAdmin(context.Background(), fmt.Sprintf(
+			"Channel <b>%d</b> has an unusable scan schedule (%s).\nIt is being scanned every %s instead. Fix its schedule in the app.",
+			record.ID, html.EscapeString(err.Error()), d.channelAutoScanInterval,
+		))
 	}
+	d.channelsMutex.Lock()
 
 	// Channel cache
 	info := d.channels[channel.ID]
@@ -227,8 +243,6 @@ func mergeProtectedChannel(existing, added ProtectedChannel) ProtectedChannel {
 	return merged
 }
 
-// applyOptions installs the schedule described by opts. A channel has one
-// schedule, so when several options supply one the last wins.
 // mergeRestoredChannel reconciles a record loaded from storage with one the
 // embedding application wired from its configuration (e.g. the CHANNELS env
 // var) before Run().
@@ -317,6 +331,8 @@ func (d *Domain) restoreProtectedChannel(
 	return d.addProtectedChannel(&record, mergeRestoredChannel)
 }
 
+// applyOptions installs the schedule described by opts. A channel has one
+// schedule, so when several options supply one the last wins.
 func (d *Domain) applyOptions(opts []TickerOption, channelID int64) error {
 	installed := false
 	for _, opt := range opts {
@@ -375,18 +391,31 @@ func (d *Domain) MigrateChannel(migratedFromID, migratedToID int64) error {
 	return nil
 }
 
+// CleanProtectedChannel detaches channelID from one control chat, and when
+// that was its last one stops protecting it altogether.
+//
+// It holds channelsMutex throughout: it reads and writes protectedChannels and
+// commandChannels, which the rights checker, the scan workers, the ticker loop
+// and the update handlers all touch. It used to take no lock at all, and that
+// matters more now that AddProtectedChannel releases channelsMutex to install
+// a schedule - a detach landing in that window could delete the record while
+// the add was mid-flight and have the add put the caches back for a channel
+// that is no longer protected.
 func (d *Domain) CleanProtectedChannel(channelID int64, commandChannelId int64) error {
+	d.channelsMutex.Lock()
+	defer d.channelsMutex.Unlock()
 
 	protectedChannel, found := d.protectedChannels[channelID]
 	if !found {
 		return nil
 	}
 
-	commandChannels := protectedChannel.CommandChannelIDs
+	// Copy before editing: the slice header is shared with the stored record
+	// and with the caller's view of it.
+	commandChannels := slices.Clone(protectedChannel.CommandChannelIDs)
 	for i, commandChannel := range commandChannels {
 		if commandChannel == commandChannelId {
-			commandChannels[i] = commandChannels[len(commandChannels)-1]
-			commandChannels = commandChannels[:len(commandChannels)-1]
+			commandChannels = append(commandChannels[:i], commandChannels[i+1:]...)
 			break
 		}
 	}
@@ -418,11 +447,10 @@ func (d *Domain) CleanProtectedChannel(channelID int64, commandChannelId int64) 
 		}
 	}
 
-	controlledChannels := d.commandChannels[commandChannelId]
+	controlledChannels := slices.Clone(d.commandChannels[commandChannelId])
 	for i, chanID := range controlledChannels {
 		if chanID == channelID {
-			controlledChannels[i] = controlledChannels[len(controlledChannels)-1]
-			controlledChannels = controlledChannels[:len(controlledChannels)-1]
+			controlledChannels = append(controlledChannels[:i], controlledChannels[i+1:]...)
 			break
 		}
 	}

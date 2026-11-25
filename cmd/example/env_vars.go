@@ -3,24 +3,36 @@ package main
 import "time"
 
 type environmentConfig struct {
-	TelegramBotKey             string          `env:"TELEGRAM_BOT_KEY"`
-	TelegramAppID              int             `env:"TELEGRAM_APP_ID"`
-	TelegramAppKey             string          `env:"TELEGRAM_APP_KEY"`
-	SessionKey                 string          `env:"SESSION_KEY"`
-	AdminChatID                int64           `env:"ADMIN_CHAT_ID"`
-	AdminSecret                string          `env:"ADMIN_SECRET"`
-	Channels                   []int64         `env:"CHANNELS" envSeparator:","`
-	CommandChannels            map[int64]int64 `env:"COMMAND_CHANNELS" envSeparator:"," envKeyValSeparator:":"`
-	AccessCheckInterval        time.Duration   `env:"ACCESS_CHECK_INTERVAL"`
-	ChannelScanInterval        time.Duration   `env:"CHANNEL_SCAN_INTERVAL"`
-	ChannelMembersCacheTTL     time.Duration   `env:"CHANNEL_MEMBERS_CACHE_TTL"`
-	AccessCheckerCacheTTL      time.Duration   `env:"ACCESS_CHECKER_CACHE_TTL"`
-	AutoKickUsers              bool            `env:"AUTO_KICK_USERS"`
-	KeepKickedUsersBanned      bool            `env:"KEEP_KICKED_USERS_BANNED"`
-	HideMessagesForKickedUsers bool            `env:"HIDE_MESSAGES_FOR_KICKED_USERS"`
-	KickUnknownUsers           bool            `env:"KICK_UNKNOWN_USERS"`
-	UseRedisSessionStorage     bool            `env:"USE_REDIS_SESSION_STORAGE"`
-	RedisHost                  string          `env:"REDIS_HOST"`
+	TelegramBotKey      string          `env:"TELEGRAM_BOT_KEY"`
+	TelegramAppID       int             `env:"TELEGRAM_APP_ID"`
+	TelegramAppKey      string          `env:"TELEGRAM_APP_KEY"`
+	SessionKey          string          `env:"SESSION_KEY"`
+	AdminChatID         int64           `env:"ADMIN_CHAT_ID"`
+	AdminSecret         string          `env:"ADMIN_SECRET"`
+	Channels            []int64         `env:"CHANNELS" envSeparator:","`
+	CommandChannels     map[int64]int64 `env:"COMMAND_CHANNELS" envSeparator:"," envKeyValSeparator:":"`
+	AccessCheckInterval time.Duration   `env:"ACCESS_CHECK_INTERVAL"`
+	ChannelScanInterval time.Duration   `env:"CHANNEL_SCAN_INTERVAL"`
+	// ChannelScanAt is the default scan time of day, "HH:MM", read in
+	// ScheduleTZ. Empty keeps every channel on ChannelScanInterval.
+	ChannelScanAt string `env:"CHANNEL_SCAN_AT"`
+	// ChannelScanDays limits the default schedule to these weekdays, as
+	// comma-separated short names (mon,tue,…) or "mon-fri". Empty = every day.
+	ChannelScanDays string `env:"CHANNEL_SCAN_DAYS"`
+	// DailyReportAt releases the daily summary from this time of day on.
+	// Empty keeps the "once per interval since the last one" throttle.
+	DailyReportAt string `env:"DAILY_REPORT_AT"`
+	// ScheduleTZ is the IANA zone the times above are read in. Without it they
+	// would be read in UTC rather than the host's arbitrary local zone.
+	ScheduleTZ                 string        `env:"SCHEDULE_TZ"`
+	ChannelMembersCacheTTL     time.Duration `env:"CHANNEL_MEMBERS_CACHE_TTL"`
+	AccessCheckerCacheTTL      time.Duration `env:"ACCESS_CHECKER_CACHE_TTL"`
+	AutoKickUsers              bool          `env:"AUTO_KICK_USERS"`
+	KeepKickedUsersBanned      bool          `env:"KEEP_KICKED_USERS_BANNED"`
+	HideMessagesForKickedUsers bool          `env:"HIDE_MESSAGES_FOR_KICKED_USERS"`
+	KickUnknownUsers           bool          `env:"KICK_UNKNOWN_USERS"`
+	UseRedisSessionStorage     bool          `env:"USE_REDIS_SESSION_STORAGE"`
+	RedisHost                  string        `env:"REDIS_HOST"`
 	// RedisUsername/RedisPassword enable Redis AUTH. Empty = no auth
 	// (backwards-compatible). Set both for Redis 6 ACL, or just Password for
 	// the legacy requirepass scheme.

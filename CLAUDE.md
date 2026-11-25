@@ -85,8 +85,8 @@ to `.env` (gitignored). Highlights:
 | `CHANNELS` | Comma-separated protected channel ids |
 | `COMMAND_CHANNELS` | `channelID:controlChatID` pairs, comma-separated |
 | `ACCESS_CHECK_INTERVAL` / `CHANNEL_SCAN_INTERVAL` | Durations (e.g. `30m`, `2h`) |
-| `CHANNEL_SCAN_AT` / `CHANNEL_SCAN_DAYS` / `SCHEDULE_TZ` | Default scan schedule: time of day, weekdays, zone |
-| `DAILY_REPORT_AT` | Time of day the daily summary is released |
+| `CHANNEL_SCAN_AT` / `CHANNEL_SCAN_DAYS` / `SCHEDULE_TZ` | Default scan schedule: time of day, weekdays, zone. Empty `CHANNEL_SCAN_AT` keeps channels on `CHANNEL_SCAN_INTERVAL` |
+| `DAILY_REPORT_AT` | Time of day the daily summary is released; empty = every `IntervalHours` since the last one |
 | `CHANNEL_MEMBERS_CACHE_TTL` / `ACCESS_CHECKER_CACHE_TTL` | Cache TTLs |
 | `AUTO_KICK_USERS` / `KEEP_KICKED_USERS_BANNED` / `HIDE_MESSAGES_FOR_KICKED_USERS` / `KICK_UNKNOWN_USERS` | Kicker behavior flags |
 | `USE_REDIS_SESSION_STORAGE` | `true` → Redis sessions, else file |

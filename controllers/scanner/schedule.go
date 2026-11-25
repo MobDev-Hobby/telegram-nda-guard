@@ -72,6 +72,7 @@ func (d *Domain) setSchedule(channelID int64, schedule *channelSchedule) {
 		d.schedules = make(map[int64]*channelSchedule)
 	}
 	d.schedules[channelID] = schedule
+	d.wakeTickerLocked()
 }
 
 // ensureIntervalSchedule gives channelID the default interval schedule unless
@@ -97,6 +98,7 @@ func (d *Domain) dropSchedule(channelID int64) {
 	defer d.scheduleMutex.Unlock()
 	d.stopScheduleLocked(channelID)
 	delete(d.schedules, channelID)
+	d.wakeTickerLocked()
 }
 
 // migrateSchedule moves a schedule to the id Telegram migrated the chat to,
@@ -117,6 +119,7 @@ func (d *Domain) migrateSchedule(fromChannelID, toChannelID int64) {
 	}
 	d.schedules[toChannelID] = schedule
 	delete(d.schedules, fromChannelID)
+	d.wakeTickerLocked()
 }
 
 // hasSchedule reports whether channelID is scheduled.
@@ -125,6 +128,32 @@ func (d *Domain) hasSchedule(channelID int64) bool {
 	defer d.scheduleMutex.Unlock()
 	_, ok := d.schedules[channelID]
 	return ok
+}
+
+// wakeTickerLocked tells the ticker loop that the registry changed, so it
+// re-snapshots instead of staying parked in reflect.Select on schedules that
+// may no longer exist. Callers must hold scheduleMutex; the send never blocks.
+func (d *Domain) wakeTickerLocked() {
+	if d.scheduleChanged == nil {
+		d.scheduleChanged = make(chan struct{}, 1)
+	}
+	select {
+	case d.scheduleChanged <- struct{}{}:
+	default:
+		// A wake-up is already pending; the loop will re-snapshot once and
+		// see every change made in the meantime.
+	}
+}
+
+// tickerWakeup returns the channel the ticker loop selects on for registry
+// changes.
+func (d *Domain) tickerWakeup() <-chan struct{} {
+	d.scheduleMutex.Lock()
+	defer d.scheduleMutex.Unlock()
+	if d.scheduleChanged == nil {
+		d.scheduleChanged = make(chan struct{}, 1)
+	}
+	return d.scheduleChanged
 }
 
 // stopScheduleLocked stops the schedule of channelID, if any, without removing

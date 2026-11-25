@@ -53,6 +53,10 @@ type Domain struct {
 	// per tick and never add or remove one.
 	scheduleMutex sync.Mutex
 	schedules     map[int64]*channelSchedule
+	// scheduleChanged wakes the ticker loop when a schedule is installed,
+	// replaced or dropped, so it re-snapshots the registry instead of staying
+	// parked on schedules that may no longer fire.
+	scheduleChanged chan struct{}
 
 	// cron is the one scheduler shared by every cron-scheduled channel, with
 	// a zone-qualified entry per channel. It is created on first use.
@@ -142,6 +146,7 @@ func New(
 		scans:              make(map[string]*scanJob),
 		noticeTimes:        make(map[int64]map[string]time.Time),
 		schedules:          make(map[int64]*channelSchedule),
+		scheduleChanged:    make(chan struct{}, 1),
 
 		whitelistTTL:          DefaultWhitelistTTL,
 		whitelistRemindBefore: DefaultWhitelistRemindBefore,

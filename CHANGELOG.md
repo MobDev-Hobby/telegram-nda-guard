@@ -94,7 +94,28 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
   one pass.
 - Interval tickers leaked: the `*time.Ticker` was dropped on the floor, so it
   could never be stopped and every rebuild left another one running. Schedules
-  keep their stop func and are released when the checker loop sees `ctx.Done`.
+  keep their stop func and are released when the checker loop sees `ctx.Done`,
+  which also stops the shared cron scheduler.
+- The ticker loop parks in `reflect.Select` on a snapshot of the registry, so
+  a schedule installed or replaced after it parked was invisible until some
+  other channel's tick fired. With every channel on one interval that only
+  delayed a newly added channel; with per-channel cron entries it was
+  permanent, because replacing a schedule removes the entry feeding the
+  channel the loop is parked on — so a channel whose scan time was changed, or
+  the first channel added to an empty registry, was never scanned again. The
+  registry now wakes the loop.
+- A schedule that cannot be compiled no longer leaves a channel protected,
+  persisted and unscheduled. `AddProtectedChannel` falls back to the interval,
+  logs it and notifies the owner; a malformed `TickerOption` still fails the
+  add, because that is a wiring mistake rather than stored data.
+- `SetChannelSchedule` keeps the channel's time zone when the incoming
+  schedule names none, instead of silently moving the channel to the service
+  default or to UTC. The Mini App edits only the time and days.
+- A settings request that mentions no cleaning option no longer gives the
+  channel its own copy of the defaults, which stopped it tracking
+  `WithDefaultCleanOptions` and marked it as customised in the UI.
+- `CleanProtectedChannel` holds `channelsMutex`, which it never did, and no
+  longer edits the stored record's slices in place.
 
 ### Migration
 
