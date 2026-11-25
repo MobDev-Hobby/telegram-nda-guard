@@ -68,15 +68,23 @@ type UserKicker interface {
 }
 
 // ChannelSettings is every per-channel setting an administrator can change.
+//
+// The switches are pointers on purpose: this struct is decoded straight from
+// the settings request body, and a plain bool makes an omitted field
+// indistinguishable from an explicit false. A client that sent only the one
+// setting it meant to change would switch every other automation off - which
+// is how a channel lost its scanning without anyone asking for it. nil means
+// "leave as it is".
 type ChannelSettings struct {
-	AutoScan      bool `json:"autoScan"`
-	AutoClean     bool `json:"autoClean"`
-	AllowClean    bool `json:"allowClean"`
-	KeepBanned    bool `json:"keepBanned"`
-	CleanMessages bool `json:"cleanMessages"`
-	CleanUnknown  bool `json:"cleanUnknown"`
-	// JoinRequests is the join request mode: off, auto or manual.
-	JoinRequests  string                          `json:"joinRequests"`
+	AutoScan      *bool `json:"autoScan,omitempty"`
+	AutoClean     *bool `json:"autoClean,omitempty"`
+	AllowClean    *bool `json:"allowClean,omitempty"`
+	KeepBanned    *bool `json:"keepBanned,omitempty"`
+	CleanMessages *bool `json:"cleanMessages,omitempty"`
+	CleanUnknown  *bool `json:"cleanUnknown,omitempty"`
+	// JoinRequests is the join request mode: off, auto or manual. Empty means
+	// "leave as it is".
+	JoinRequests  string                          `json:"joinRequests,omitempty"`
 	Notifications *processors.NotificationOptions `json:"notifications,omitempty"`
 }
 
@@ -217,33 +225,47 @@ func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settin
 		return ErrJoinRequestsDisabled
 	}
 	err := d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
-		pc.JoinRequestMode = settings.JoinRequests
+		if settings.JoinRequests != "" {
+			pc.JoinRequestMode = settings.JoinRequests
+		}
 		if settings.Notifications != nil {
 			opts := *settings.Notifications
 			pc.Notifications = &opts
 		}
-		pc.AutoScan = settings.AutoScan
-		pc.AutoClean = settings.AutoClean
-		pc.AllowClean = settings.AllowClean
-		pc.CleanOptions = &processors.CleanOptions{
-			KeepBanned:    settings.KeepBanned,
-			CleanMessages: settings.CleanMessages,
-			CleanUnknown:  settings.CleanUnknown,
+		applyBool(&pc.AutoScan, settings.AutoScan)
+		applyBool(&pc.AutoClean, settings.AutoClean)
+		applyBool(&pc.AllowClean, settings.AllowClean)
+		clean := d.defaultCleanOptions
+		if pc.CleanOptions != nil {
+			clean = *pc.CleanOptions
 		}
+		applyBool(&clean.KeepBanned, settings.KeepBanned)
+		applyBool(&clean.CleanMessages, settings.CleanMessages)
+		applyBool(&clean.CleanUnknown, settings.CleanUnknown)
+		pc.CleanOptions = &clean
 	})
 	if err != nil {
 		return err
 	}
 	pc, _ := d.getProtectedChannel(channelID)
+	details := map[string]any{"joinRequests": pc.JoinRequestMode, "notifications": pc.Notifications,
+		"autoScan": pc.AutoScan, "autoClean": pc.AutoClean, "allowClean": pc.AllowClean}
+	if pc.CleanOptions != nil {
+		details["keepBanned"] = pc.CleanOptions.KeepBanned
+		details["cleanMessages"] = pc.CleanOptions.CleanMessages
+		details["cleanUnknown"] = pc.CleanOptions.CleanUnknown
+	}
 	d.recordAudit(ctx, pc, audit.Event{
-		ActorID: callerID, Action: audit.ActionSettingsChanged,
-		Details: map[string]any{
-			"autoScan": settings.AutoScan, "autoClean": settings.AutoClean, "allowClean": settings.AllowClean,
-			"keepBanned": settings.KeepBanned, "cleanMessages": settings.CleanMessages, "cleanUnknown": settings.CleanUnknown,
-			"joinRequests": settings.JoinRequests, "notifications": settings.Notifications,
-		},
+		ActorID: callerID, Action: audit.ActionSettingsChanged, Details: details,
 	}, fmt.Sprintf("Settings of %s changed by %s.", html.EscapeString(d.channelTitle(channelID)), actorLink(callerID, d.userName(callerID))))
 	return nil
+}
+
+// applyBool writes value to target when the caller supplied one.
+func applyBool(target *bool, value *bool) {
+	if value != nil {
+		*target = *value
+	}
 }
 
 // StartChannelScan implements MiniAppService.

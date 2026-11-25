@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 	"strings"
 	"sync"
 	"testing"
@@ -146,7 +147,7 @@ func TestNotificationSettingsValidationAndPersistence(t *testing.T) {
 	opts := processors.NotificationOptions{Mode: NotificationViolationsOnly, IntervalHours: 72}
 	require.NoError(t, env.d.SetChannelSettings(ctx, testChannelID, ChannelSettings{Notifications: &opts}, testAdminID))
 	// An older client omitting this new field retains the saved preference.
-	require.NoError(t, env.d.SetChannelSettings(ctx, testChannelID, ChannelSettings{AllowClean: true}, testAdminID))
+	require.NoError(t, env.d.SetChannelSettings(ctx, testChannelID, ChannelSettings{AllowClean: utils.Ptr(true)}, testAdminID))
 	pc, _ := env.d.getProtectedChannel(testChannelID)
 	assert.Equal(t, &opts, storageRecord(pc).Notifications)
 	view, err := env.d.GetChannel(ctx, testChannelID)

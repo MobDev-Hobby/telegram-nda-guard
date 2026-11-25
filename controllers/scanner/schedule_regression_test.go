@@ -2,8 +2,12 @@ package scanner
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 )
@@ -175,4 +179,69 @@ func TestBadScheduleIsRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for an invalid cron spec")
 	}
+}
+
+// TestPartialSettingsPayloadKeepsUntouchedFlags: PUT {id}/settings decodes
+// into ChannelSettings, so a payload that omits a flag used to read as false
+// and switch that automation off. Omitted means "leave as it is".
+func TestPartialSettingsPayloadKeepsUntouchedFlags(t *testing.T) {
+	d, _, _, _, _ := newMiniAppDomain(t, true)
+	ctx := context.Background()
+	require.NoError(t, d.updateProtectedChannel(ctx, testChannelID, func(pc *ProtectedChannel) {
+		pc.AutoScan, pc.AutoClean = true, true
+	}))
+
+	// Only the join request mode is being changed.
+	var settings ChannelSettings
+	require.NoError(t, json.Unmarshal([]byte(`{"joinRequests":"off"}`), &settings))
+	require.NoError(t, d.SetChannelSettings(ctx, testChannelID, settings, testAdminID))
+
+	pc, ok := d.getProtectedChannel(testChannelID)
+	require.True(t, ok)
+	assert.True(t, pc.AutoScan, "autoScan was not in the payload and must not be switched off")
+	assert.True(t, pc.AutoClean, "autoClean was not in the payload and must not be switched off")
+}
+
+// TestSettingsPayloadStillAppliesExplicitFalse makes sure the pointer change
+// does not break switching something off on purpose.
+func TestSettingsPayloadStillAppliesExplicitFalse(t *testing.T) {
+	d, _, _, _, _ := newMiniAppDomain(t, true)
+	ctx := context.Background()
+	require.NoError(t, d.updateProtectedChannel(ctx, testChannelID, func(pc *ProtectedChannel) {
+		pc.AutoScan = true
+	}))
+
+	var settings ChannelSettings
+	require.NoError(t, json.Unmarshal([]byte(`{"autoScan":false,"joinRequests":"off"}`), &settings))
+	require.NoError(t, d.SetChannelSettings(ctx, testChannelID, settings, testAdminID))
+
+	pc, ok := d.getProtectedChannel(testChannelID)
+	require.True(t, ok)
+	assert.False(t, pc.AutoScan, "an explicit false must switch autoScan off")
+}
+
+// TestRestartKeepsOperatorDisabledAutoScan: a channel listed in CHANNELS is
+// added from env at New() with AutoScan on, then the stored record is restored
+// in Run(). The operator's stored choice must win, or every restart silently
+// switches automation back on.
+func TestRestartKeepsOperatorDisabledAutoScan(t *testing.T) {
+	storage := newMemoryStorage()
+	d := newTestDomain(t, storage)
+
+	// From env: AutoScan on.
+	require.NoError(t, d.AddProtectedChannel(&ProtectedChannel{
+		ID: 100, CommandChannelIDs: []int64{5}, AutoScan: true, ScanReportProcessor: nopReportProcessor{},
+	}))
+	// The operator switched it off; that is what Redis holds.
+	require.NoError(t, d.applyFlagToggle(context.Background(), 100, flagAutoScan))
+	stored, ok := storage.get(100)
+	require.True(t, ok)
+	require.False(t, stored.AutoScan)
+
+	// Restore over the env record, as Run() does.
+	require.NoError(t, d.restoreProtectedChannel(&stored, nopReportProcessor{}, nopReportProcessor{}, nil))
+
+	pc, ok := d.getProtectedChannel(100)
+	require.True(t, ok)
+	assert.False(t, pc.AutoScan, "the stored choice must survive a restart")
 }

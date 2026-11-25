@@ -21,30 +21,17 @@ func (d *Domain) Run(
 		if err != nil {
 			return fmt.Errorf("can't load protected channels list: %w", err)
 		}
-		for _, protectedChannel := range protectedChannels {
-			protectedChannel := ProtectedChannel{
-				ID:                protectedChannel.ID,
-				Title:             protectedChannel.Title,
-				ChatType:          protectedChannel.ChatType,
-				AddedBy:           protectedChannel.AddedBy,
-				AddedByName:       protectedChannel.AddedByName,
-				AddedAt:           protectedChannel.AddedAt,
-				Notifications:     protectedChannel.Notifications,
-				LastNotifiedAt:    protectedChannel.LastNotifiedAt,
-				CommandChannelIDs: protectedChannel.CommandChannelIDs,
-				AutoScan:          protectedChannel.AutoScan,
-				AutoClean:         protectedChannel.AutoClean,
-				AllowClean:        protectedChannel.AllowClean,
-				CleanOptions:      protectedChannel.CleanOptions,
-				Managers:          protectedChannel.Managers,
-				LastCheck:         protectedChannel.LastCheck,
-				JoinRequestMode:   protectedChannel.JoinRequestMode,
-			}
-			protectedChannel.CleanReportProcessor = d.defaultCleanProcessor
-			protectedChannel.ScanReportProcessor = d.defaultScanProcessor
-			protectedChannel.AccessChecker = d.defaultAccessChecker
-			if err := d.AddDefaultProtectedChannel(&protectedChannel); err != nil {
-				d.log.Errorf("can't restore protected channel %d: %s", protectedChannel.ID, err)
+		for _, stored := range protectedChannels {
+			stored := stored
+			// The stored record wins over anything the application wired from
+			// its configuration: it holds what the operator last chose.
+			if err := d.restoreProtectedChannel(
+				&stored,
+				d.defaultScanProcessor,
+				d.defaultCleanProcessor,
+				d.defaultAccessChecker,
+			); err != nil {
+				d.log.Errorf("can't restore protected channel %d: %s", stored.ID, err)
 			}
 		}
 	}

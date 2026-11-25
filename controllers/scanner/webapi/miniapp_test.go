@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -338,7 +339,8 @@ func TestMiniAppSaveSettings(t *testing.T) {
 		`{"autoScan":true,"autoClean":false,"allowClean":true,"keepBanned":true,"cleanMessages":false,"cleanUnknown":true}`)
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, scanner.ChannelSettings{
-		AutoScan: true, AllowClean: true, KeepBanned: true, CleanUnknown: true,
+		AutoScan: utils.Ptr(true), AutoClean: utils.Ptr(false), AllowClean: utils.Ptr(true),
+		KeepBanned: utils.Ptr(true), CleanMessages: utils.Ptr(false), CleanUnknown: utils.Ptr(true),
 	}, app.settings[-100])
 }
 

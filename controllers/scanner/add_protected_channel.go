@@ -83,7 +83,16 @@ func (d *Domain) AddDefaultProtectedChannel(pc *ProtectedChannel) error {
 	})
 }
 
+// mergeStrategy reconciles a channel that is already protected with one being
+// added again. The two strategies differ in who wins: see
+// mergeProtectedChannel and mergeRestoredChannel.
+type mergeStrategy func(existing, added ProtectedChannel) ProtectedChannel
+
 func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOption) error {
+	return d.addProtectedChannel(channel, mergeProtectedChannel, opts...)
+}
+
+func (d *Domain) addProtectedChannel(channel *ProtectedChannel, merge mergeStrategy, opts ...TickerOption) error {
 	if channel == nil {
 		return nil
 	}
@@ -106,7 +115,7 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 	existing, found := d.protectedChannels[channel.ID]
 	record := *channel
 	if found {
-		record = mergeProtectedChannel(existing, *channel)
+		record = merge(existing, *channel)
 	}
 
 	if d.storage != nil {
@@ -120,13 +129,8 @@ func (d *Domain) AddProtectedChannel(channel *ProtectedChannel, opts ...TickerOp
 	}
 
 	// Protected channels list
-	if existing, found := d.protectedChannels[channel.ID]; found {
-		merged := mergeProtectedChannel(existing, *channel)
-		d.protectedChannels[channel.ID] = merged
-		channel = &merged
-	} else {
-		d.protectedChannels[channel.ID] = *channel
-	}
+	d.protectedChannels[record.ID] = record
+	channel = &record
 
 	// Schedule. A protected channel always gets one, whatever its automation
 	// flags say right now: the ticker loop checks AutoScan/AutoClean per tick,
@@ -214,6 +218,92 @@ func mergeProtectedChannel(existing, added ProtectedChannel) ProtectedChannel {
 
 // applyOptions installs the schedule described by opts. A channel has one
 // schedule, so when several options supply one the last wins.
+// mergeRestoredChannel reconciles a record loaded from storage with one the
+// embedding application wired from its configuration (e.g. the CHANNELS env
+// var) before Run().
+//
+// It is the mirror image of mergeProtectedChannel: there, a channel being
+// added again must not clobber the settings it already has, so existing wins.
+// Here, the stored record IS the operator's settings - what they last chose in
+// the Mini App or with /setflag - so it wins over the configured defaults.
+// Keeping the configuration authoritative meant a channel switched off by an
+// operator came back on at the next restart, and one whose notification or
+// cleaning preferences differed from the defaults silently lost them.
+//
+// Wiring that is never persisted (checkers, report processors) comes from the
+// configured record; control chats and managers are the union of both.
+func mergeRestoredChannel(configured, stored ProtectedChannel) ProtectedChannel {
+	merged := configured
+
+	merged.AutoScan = stored.AutoScan
+	merged.AutoClean = stored.AutoClean
+	merged.AllowClean = stored.AllowClean
+	merged.CleanOptions = stored.CleanOptions
+	merged.JoinRequestMode = stored.JoinRequestMode
+	merged.Notifications = stored.Notifications
+	merged.LastCheck = stored.LastCheck
+	merged.LastNotifiedAt = stored.LastNotifiedAt
+
+	if stored.Title != "" {
+		merged.Title = stored.Title
+	}
+	if stored.ChatType != "" {
+		merged.ChatType = stored.ChatType
+	}
+	if stored.AddedBy != 0 {
+		merged.AddedBy, merged.AddedByName, merged.AddedAt = stored.AddedBy, stored.AddedByName, stored.AddedAt
+	}
+
+	merged.CommandChannelIDs = unionIDs(configured.CommandChannelIDs, stored.CommandChannelIDs)
+	merged.Managers = unionIDs(configured.Managers, stored.Managers)
+	return merged
+}
+
+func unionIDs(base, added []int64) []int64 {
+	out := slices.Clone(base)
+	for _, id := range added {
+		if !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// restoreProtectedChannel brings a persisted channel back after a restart,
+// letting the stored settings win over anything the application configured.
+func (d *Domain) restoreProtectedChannel(
+	stored *channels.ProtectedChannel,
+	scanProcessor, cleanProcessor UserReportProcessor,
+	accessChecker CheckUserAccess,
+) error {
+	if stored == nil {
+		return nil
+	}
+	record := ProtectedChannel{
+		ID:                stored.ID,
+		Title:             stored.Title,
+		ChatType:          stored.ChatType,
+		AddedBy:           stored.AddedBy,
+		AddedByName:       stored.AddedByName,
+		AddedAt:           stored.AddedAt,
+		Notifications:     stored.Notifications,
+		LastNotifiedAt:    stored.LastNotifiedAt,
+		CommandChannelIDs: stored.CommandChannelIDs,
+		AutoScan:          stored.AutoScan,
+		AutoClean:         stored.AutoClean,
+		AllowClean:        stored.AllowClean,
+		CleanOptions:      stored.CleanOptions,
+		Managers:          stored.Managers,
+		LastCheck:         stored.LastCheck,
+		JoinRequestMode:   stored.JoinRequestMode,
+
+		AccessChecker:        accessChecker,
+		ScanReportProcessor:  scanProcessor,
+		CleanReportProcessor: cleanProcessor,
+	}
+	return d.addProtectedChannel(&record, mergeRestoredChannel)
+}
+
 func (d *Domain) applyOptions(opts []TickerOption, channelID int64) error {
 	installed := false
 	for _, opt := range opts {
