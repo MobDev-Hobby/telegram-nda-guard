@@ -27,6 +27,32 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ---
 
+## [0.6.1] — 2026-11-26
+
+### Fixed
+
+- `webapi.MiniAppEndpoints` was missing `PUT /api/miniapp/channels/*/schedule`,
+  the route 0.6.0 added. The Mini App routes by hand-written switches over the
+  path tail rather than mux patterns, so the list drifted from the router
+  silently: both the route test here and a consumer's allowlist test pass
+  vacuously, because each only checks that *listed* routes are reachable. A
+  deployment that builds a path allowlist from the list (an Avito PaaS
+  `auth.toml`, an nginx location) therefore answered **403 on the schedule
+  route in production only**, where saving a channel's scan schedule from the
+  Mini App would fail.
+- `TestMiniAppEndpointsListEveryRoutedSegment` now reads the package's own
+  sources and requires every path segment the dispatchers compare against to
+  appear in `MiniAppEndpoints`, so a new sub-path cannot be served without
+  being listed.
+
+### Migration
+
+- Consumers that keep their own path allowlist must add the schedule route.
+  On Avito PaaS, add `"http:put:/api/miniapp/channels/*/schedule"` to the Mini
+  App policy in `auth.toml`.
+
+---
+
 ## [0.6.0] — 2026-11-26
 
 ### Added
