@@ -15,6 +15,7 @@ var MiniAppEndpoints = []string{
 	"GET /api/miniapp/channels/*",
 	"POST /api/miniapp/channels/*/join",
 	"PUT /api/miniapp/channels/*/settings",
+	"PUT /api/miniapp/channels/*/schedule",
 	"POST /api/miniapp/channels/*/scans",
 	"GET /api/miniapp/channels/*/scans/*",
 	"POST /api/miniapp/channels/*/scans/*/users/*/recheck",
