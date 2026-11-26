@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	guard "github.com/MobDev-Hobby/telegram-nda-guard"
@@ -83,6 +84,15 @@ func (d *Domain) fillCleanOptions(v *ChannelView, pc ProtectedChannel) {
 	if v.WhitelistEnabled {
 		v.WhitelistTTLDays = int(d.whitelistTTL / (24 * time.Hour))
 	}
+	schedule, custom := d.effectiveSchedule(pc)
+	v.CustomScanSchedule = custom
+	if schedule != nil {
+		s := *schedule
+		s.Weekdays = slices.Clone(schedule.Weekdays)
+		v.ScanSchedule = &s
+	}
+	v.ScanScheduleText = d.describeScheduleOf(pc)
+	v.ScanScheduleTZ = d.scheduleLocationOf(pc).String()
 }
 
 // ListChannels implements ManagementService.
@@ -180,8 +190,15 @@ func (d *Domain) applyFlagSet(ctx context.Context, channelID int64, autoScan, au
 	})
 }
 
-// updateProtectedChannel applies mutate to a protected channel, persists the
-// result and keeps the periodic ticker in sync with AutoScan/AutoClean.
+// updateProtectedChannel applies mutate to a protected channel and persists
+// the result.
+//
+// It deliberately does not touch the channel's schedule. Most callers only
+// refresh bookkeeping (title, last check, last notification, managers), and
+// when this helper also synced the schedule against AutoScan/AutoClean, any
+// of them could delete a caller-supplied cron schedule and have it come back
+// as a plain interval ticker. Schedules belong to AddProtectedChannel and
+// CleanProtectedChannel.
 func (d *Domain) updateProtectedChannel(ctx context.Context, channelID int64, mutate func(pc *ProtectedChannel)) error {
 	d.channelsMutex.Lock()
 	pc, ok := d.protectedChannels[channelID]
@@ -200,17 +217,8 @@ func (d *Domain) updateProtectedChannel(ctx context.Context, channelID int64, mu
 		}
 	}
 	d.protectedChannels[channelID] = pc
-	needsTicker := pc.AutoScan || pc.AutoClean
 	d.channelsMutex.Unlock()
 
-	hasTicker := d.channelHasTicker(channelID)
-	switch {
-	case needsTicker && !hasTicker:
-		ticker := time.NewTicker(d.channelAutoScanInterval)
-		_ = d.registerTicker(ticker.C, channelID)
-	case !needsTicker && hasTicker:
-		d.removeTickers(channelID)
-	}
 	d.log.Infof("updated channel %d -> autoscan=%t autoclean=%t allowclean=%t cleanoptions=%+v",
 		channelID, pc.AutoScan, pc.AutoClean, pc.AllowClean, pc.CleanOptions)
 	return nil

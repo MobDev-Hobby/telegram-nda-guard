@@ -117,6 +117,17 @@
       keepBanned: "Оставлять в бане", keepBannedHint: "Удалённый не сможет вернуться по ссылке-приглашению.",
       cleanMessages: "Скрывать историю у удалённого участника", cleanMessagesHint: "Закрыть удалённому участнику доступ к истории чата. Не удаляет его сообщения у остальных. Для супергрупп и каналов Telegram применяет это всегда.",
       cleanUnknown: "Удалять непроверенных", cleanUnknownHint: "Автоочистка удаляет и тех, кого не удалось проверить.",
+      groupSchedule: "Расписание",
+      scanAt: "Время сканирования",
+      scanDays: "Дни",
+      scanDaysEveryDay: "Каждый день",
+      reportAt: "Время ежедневной сводки",
+      reportAtHint: "Сводка уходит раз в сутки начиная с этого времени. Ставьте его не позже времени сканирования, иначе сводка за день уйдёт только на следующем скане.",
+      reportAtInterval: "По интервалу",
+      scheduleTZNote: (tz) => `Время указано в зоне ${tz}.`,
+      scheduleDefaultNote: "Сейчас действует расписание по умолчанию. Сохранение задаст каналу своё.",
+      scheduleNow: (text) => `Сканирование: ${text}.`,
+      weekdayNames: ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"],
       joinModes: { off: "Выкл", auto: "Авто", manual: "Вручную" },
       joinModeHint: {
         off: "Заявки разбирают админы в Telegram, бот их не трогает.",
@@ -254,6 +265,17 @@
       keepBanned: "Keep banned", keepBannedHint: "Removed members can't come back via an invite link.",
       cleanMessages: "Hide history from removed member", cleanMessagesHint: "Revoke the removed member's access to chat history. Does not delete their posts for others. Telegram always applies this in supergroups and channels.",
       cleanUnknown: "Remove unchecked", cleanUnknownHint: "Auto clean also removes members whose check failed.",
+      groupSchedule: "Schedule",
+      scanAt: "Scan time",
+      scanDays: "Days",
+      scanDaysEveryDay: "Every day",
+      reportAt: "Daily summary time",
+      reportAtHint: "The summary goes out once a day from this time on. Keep it at or before the scan time, or the day's summary waits for the next scan.",
+      reportAtInterval: "By interval",
+      scheduleTZNote: (tz) => `Times are in ${tz}.`,
+      scheduleDefaultNote: "The default schedule applies now. Saving gives the channel its own.",
+      scheduleNow: (text) => `Scans ${text}.`,
+      weekdayNames: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
       joinModes: { off: "Off", auto: "Auto", manual: "Manual" },
       joinModeHint: {
         off: "Admins handle requests in Telegram; the bot leaves them alone.",
@@ -1068,6 +1090,20 @@
 
   // ---------- settings & audit ----------
 
+  // timeOptions lists the selectable times of day at 15-minute steps, plus
+  // whatever the channel already has so a stored 13:05 is never dropped by
+  // simply opening the form.
+  function timeOptions(extra) {
+    const out = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (const minute of [0, 15, 30, 45]) {
+        out.push(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+      }
+    }
+    if (extra && !out.includes(extra)) out.push(extra);
+    return out.sort();
+  }
+
   const SWITCHES = [
     ["automation", "autoScan"], ["automation", "autoClean"], ["automation", "allowClean"],
     ["cleaning", "keepBanned"], ["cleaning", "cleanMessages"], ["cleaning", "cleanUnknown"],
@@ -1081,6 +1117,11 @@
     initial.joinRequests = channel.joinRequests || "off";
     initial.notificationMode = channel.notifications?.mode || "violations_summary";
     initial.notificationHours = channel.notifications?.intervalHours || 24;
+    initial.reportAt = channel.notifications?.at || "";
+    // The effective schedule, so the controls open on what is in force rather
+    // than on an empty form.
+    initial.scanAt = channel.scanSchedule?.at || "";
+    initial.scanDays = (channel.scanSchedule?.weekdays || []).join(",");
     const current = { ...initial };
     const groups = { automation: el("div"), cleaning: el("div") };
 
@@ -1105,7 +1146,59 @@
     const interval = el("select", { attrs: { "aria-label": T.summaryEvery } });
     for (const hours of [...new Set([1, 6, 12, 24, 72, 168, current.notificationHours])].sort((a,b) => a-b)) interval.append(el("option", { value: String(hours), textContent: T.summaryHours(hours), selected: hours === current.notificationHours }));
     interval.addEventListener("change", () => { current.notificationHours = Number(interval.value); updateSave(); });
-    fieldsets.push(el("fieldset", {}, [el("legend", { textContent: T.notificationsTitle }), el("div", { className: "stack notification-settings" }, [notifyMode, text(T.notificationsHint, "muted"), el("label", {}, [text(T.summaryEvery), interval])])]));
+    // The summary is released either at a time of day or on the interval.
+    const reportAt = el("select", { attrs: { "aria-label": T.reportAt } });
+    reportAt.append(el("option", { value: "", textContent: T.reportAtInterval, selected: !current.reportAt }));
+    for (const time of timeOptions(current.reportAt)) {
+      reportAt.append(el("option", { value: time, textContent: time, selected: time === current.reportAt }));
+    }
+    reportAt.addEventListener("change", () => { current.reportAt = reportAt.value; interval.disabled = Boolean(current.reportAt); updateSave(); });
+    interval.disabled = Boolean(current.reportAt);
+    fieldsets.push(el("fieldset", {}, [el("legend", { textContent: T.notificationsTitle }), el("div", { className: "stack notification-settings" }, [notifyMode, text(T.notificationsHint, "muted"), el("label", {}, [text(T.summaryEvery), interval]), el("label", {}, [text(T.reportAt), reportAt]), text(T.reportAtHint, "muted")])]));
+
+    // Scan schedule: a time of day plus the days it applies to.
+    const scanAt = el("select", { attrs: { "aria-label": T.scanAt } });
+    scanAt.append(el("option", { value: "", textContent: T.reportAtInterval, selected: !current.scanAt }));
+    for (const time of timeOptions(current.scanAt)) {
+      scanAt.append(el("option", { value: time, textContent: time, selected: time === current.scanAt }));
+    }
+    scanAt.addEventListener("change", () => { current.scanAt = scanAt.value; syncDays(); updateSave(); });
+
+    const dayBoxes = [];
+    const days = el("div", { className: "weekdays", attrs: { role: "group", "aria-label": T.scanDays } });
+    const selectedDays = new Set(current.scanDays ? current.scanDays.split(",").map(Number) : []);
+    // Monday first, Sunday last: Telegram's audience reads a week that way,
+    // while cron numbers Sunday 0.
+    for (const day of [1, 2, 3, 4, 5, 6, 0]) {
+      const input = el("input", { type: "checkbox", checked: selectedDays.has(day), attrs: { "aria-label": T.weekdayNames[day] } });
+      input.addEventListener("change", () => {
+        if (input.checked) selectedDays.add(day);
+        else selectedDays.delete(day);
+        current.scanDays = [...selectedDays].sort((a, b) => a - b).join(",");
+        updateSave();
+      });
+      dayBoxes.push(input);
+      // The input comes first so the style can select the label text with
+      // input:checked + span, as the join-mode segmented control does.
+      days.append(el("label", { className: "weekday" }, [input, text(T.weekdayNames[day])]));
+    }
+    const daysHint = el("p", { className: "muted" });
+    function syncDays() {
+      const on = Boolean(current.scanAt);
+      for (const box of dayBoxes) box.disabled = !on;
+      daysHint.textContent = on && selectedDays.size === 0 ? T.scanDaysEveryDay : T.scheduleTZNote(channel.scanScheduleTz || "UTC");
+    }
+    syncDays();
+    fieldsets.push(el("fieldset", {}, [
+      el("legend", { textContent: T.groupSchedule }),
+      el("div", { className: "stack" }, [
+        el("label", {}, [text(T.scanAt), scanAt]),
+        el("label", {}, [text(T.scanDays), days]),
+        daysHint,
+        channel.scanScheduleText ? text(T.scheduleNow(channel.scanScheduleText), "muted") : null,
+        channel.customScanSchedule ? null : text(T.scheduleDefaultNote, "muted"),
+      ]),
+    ]));
 
     if (channel.joinRequestsEnabled) {
       const hint = el("div", { className: "hint-row" });
@@ -1143,9 +1236,19 @@
     async function save() {
       if (tg) tg.MainButton.showProgress(false);
       try {
-        const { notificationMode, notificationHours, ...settings } = current;
+        const { notificationMode, notificationHours, reportAt, scanAt, scanDays, ...settings } = current;
         settings.notifications = { mode: notificationMode, intervalHours: notificationHours };
-        const updated = await api(`channels/${channel.id}/settings`, { method: "PUT", body: settings });
+        if (reportAt) settings.notifications.at = reportAt;
+        let updated = await api(`channels/${channel.id}/settings`, { method: "PUT", body: settings });
+        // The schedule is its own endpoint: it is validated and the cron entry
+        // rebuilt server-side, and a rejected schedule must not take the rest
+        // of the settings down with it.
+        if (scanAt !== initial.scanAt || scanDays !== initial.scanDays) {
+          const schedule = scanAt
+            ? { at: scanAt, weekdays: scanDays ? scanDays.split(",").map(Number) : [] }
+            : null;
+          updated = await api(`channels/${channel.id}/schedule`, { method: "PUT", body: { schedule } });
+        }
         Object.assign(channel, updated);
         haptic("success");
         if (tg) tg.MainButton.hideProgress();

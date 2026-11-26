@@ -45,6 +45,9 @@ type ProtectedChannel struct {
 	// CleanOptions overrides the clean processor's defaults for this channel.
 	// nil means "use the defaults".
 	CleanOptions *processors.CleanOptions
+	// ScanSchedule overrides the service's default scan schedule for this
+	// channel. nil means "use the default".
+	ScanSchedule *processors.ScanSchedule
 	// Managers joined the channel in the bot (Mini App).
 	Managers []int64
 	// LastCheck is the latest member check, for the health indicator.

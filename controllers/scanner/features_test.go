@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"errors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 	"sync"
 	"testing"
 	"time"
@@ -87,7 +88,7 @@ func joinUpdate(userID int64, username string) *guard.Update {
 
 func setJoinMode(t *testing.T, d *Domain, mode string) {
 	t.Helper()
-	require.NoError(t, d.SetChannelSettings(context.Background(), testChannelID, ChannelSettings{AllowClean: true, JoinRequests: mode}, testAdminID))
+	require.NoError(t, d.SetChannelSettings(context.Background(), testChannelID, ChannelSettings{AllowClean: utils.Ptr(true), JoinRequests: mode}, testAdminID))
 }
 
 func newJoinEnv(t *testing.T) (whitelistEnv, *memJoinRequests, *countingChecker) {

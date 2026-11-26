@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"errors"
+	"github.com/MobDev-Hobby/telegram-nda-guard/utils"
 	"sync"
 	"testing"
 	"time"
@@ -262,15 +263,18 @@ func TestSetChannelSettingsPersistsCleanOptions(t *testing.T) {
 	assert.False(t, view.CustomCleanOptions)
 	assert.True(t, view.CleanMessages, "defaults are shown until the channel overrides them")
 
+	// The Mini App sends every switch, so an unchecked one is an explicit
+	// false rather than an omission.
 	require.NoError(t, d.SetChannelSettings(context.Background(), testChannelID, ChannelSettings{
-		AutoScan: true, AllowClean: true, KeepBanned: true, CleanUnknown: true,
+		AutoScan: utils.Ptr(true), AutoClean: utils.Ptr(false), AllowClean: utils.Ptr(true),
+		KeepBanned: utils.Ptr(true), CleanMessages: utils.Ptr(false), CleanUnknown: utils.Ptr(true),
 	}, testAdminID))
 
 	rec := storage.records[testChannelID]
 	require.NotNil(t, rec.CleanOptions)
 	assert.Equal(t, processors.CleanOptions{KeepBanned: true, CleanUnknown: true}, *rec.CleanOptions)
 	assert.True(t, rec.AutoScan)
-	assert.True(t, d.channelHasTicker(testChannelID))
+	assert.True(t, d.hasSchedule(testChannelID))
 
 	view, err = d.GetChannel(context.Background(), testChannelID)
 	require.NoError(t, err)

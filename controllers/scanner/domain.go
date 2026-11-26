@@ -1,10 +1,10 @@
 package scanner
 
 import (
-	"reflect"
 	"sync"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
@@ -48,9 +48,25 @@ type Domain struct {
 	defaultCleanProcessor UserReportProcessor
 	defaultAccessChecker  CheckUserAccess
 
-	tickerCasesMutex    sync.Mutex
-	tickerCases         []reflect.SelectCase
-	tickerCasesChannels []int64
+	// scheduleMutex guards schedules. A protected channel keeps its schedule
+	// for as long as it is protected; the AutoScan/AutoClean flags are read
+	// per tick and never add or remove one.
+	scheduleMutex sync.Mutex
+	schedules     map[int64]*channelSchedule
+	// scheduleChanged wakes the ticker loop when a schedule is installed,
+	// replaced or dropped, so it re-snapshots the registry instead of staying
+	// parked on schedules that may no longer fire.
+	scheduleChanged chan struct{}
+
+	// cron is the one scheduler shared by every cron-scheduled channel, with
+	// a zone-qualified entry per channel. It is created on first use.
+	cronMutex sync.Mutex
+	cron      *cron.Cron
+	// defaultScanSchedule applies to channels without their own. nil keeps
+	// the channelAutoScanInterval ticker.
+	defaultScanSchedule *processors.ScanSchedule
+	// scheduleTZ is the zone a schedule is read in when it names none.
+	scheduleTZ string
 
 	// Mini App support: manual kicks go through userKicker, scans are kept
 	// in memory so a kick can only target users a scan actually returned.
@@ -129,6 +145,8 @@ func New(
 		ready:              make(chan struct{}),
 		scans:              make(map[string]*scanJob),
 		noticeTimes:        make(map[int64]map[string]time.Time),
+		schedules:          make(map[int64]*channelSchedule),
+		scheduleChanged:    make(chan struct{}, 1),
 
 		whitelistTTL:          DefaultWhitelistTTL,
 		whitelistRemindBefore: DefaultWhitelistRemindBefore,

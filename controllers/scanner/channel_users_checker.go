@@ -197,24 +197,33 @@ func (d *Domain) RunUserAccessChecker(ctx context.Context) {
 			Dir:  reflect.SelectRecv,
 			Chan: reflect.ValueOf(ctx.Done()),
 		}
+		// Changing a schedule removes the channel the loop may be parked on,
+		// so the registry has to be able to wake it; otherwise a rescheduled
+		// or newly added channel would wait for an unrelated tick, or forever.
+		scheduleChanged := reflect.SelectCase{
+			Dir:  reflect.SelectRecv,
+			Chan: reflect.ValueOf(d.tickerWakeup()),
+		}
 		for {
-			// Snapshot the ticker slices under the lock so reflect.Select
-			// does not race registerTicker/removeTickers/MigrateChannel, and
-			// build a fresh slice to avoid aliasing d.tickerCases' backing
-			// array (append below would otherwise write into shared capacity).
-			d.tickerCasesMutex.Lock()
-			cases := make([]reflect.SelectCase, 0, len(d.tickerCases)+1)
-			cases = append(cases, d.tickerCases...)
-			tickerChannels := make([]int64, len(d.tickerCasesChannels))
-			copy(tickerChannels, d.tickerCasesChannels)
-			d.tickerCasesMutex.Unlock()
-			cases = append(cases, contextDone)
+			// Snapshot the registry under its lock so reflect.Select does not
+			// race schedule changes. Cases and ids come from one pass, so the
+			// index used below always refers to the same channel.
+			cases, tickerChannels := d.scheduleCases()
+			cases = append(cases, scheduleChanged, contextDone)
 
 			selected, _, ok := reflect.Select(cases)
-			// ctx.Done is the last case
+			// ctx.Done is the last case, the wake-up the one before it.
 			if selected == len(cases)-1 {
 				d.log.Infof("context done, terminating user access checker")
+				// Release the timers the controller owns; without this they
+				// outlive the domain.
+				d.stopSchedules()
+				d.StopCron()
 				return
+			}
+			if selected == len(cases)-2 {
+				d.log.Debugf("schedule registry changed, re-reading it")
+				continue
 			}
 			if !ok {
 				d.log.Infof("channel closed, skip")

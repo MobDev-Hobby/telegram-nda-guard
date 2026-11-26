@@ -18,12 +18,32 @@ type CleanOptions struct {
 	CleanUnknown bool `json:"cleanUnknown"`
 }
 
+// ScanSchedule says when a channel's members are checked: a time of day, the
+// days it applies to, and the zone the time is read in.
+//
+// It is stored per channel, like CleanOptions: absent means "use the service
+// default". Records written before it existed simply have no schedule.
+type ScanSchedule struct {
+	// At is the time of day in 24-hour "HH:MM" form.
+	At string `json:"at"`
+	// Weekdays limits the schedule to those days. Empty means every day.
+	Weekdays []time.Weekday `json:"weekdays,omitempty"`
+	// TZ is an IANA name such as "Europe/Moscow". Empty means the service
+	// default, so a channel inherits it unless it says otherwise.
+	TZ string `json:"tz,omitempty"`
+}
+
 // NotificationOptions controls bot messages independently of member checks.
 // Modes: all (full summaries), violations_summary (full summaries only with
 // issues), violations_only (only failing/unchecked members and partial scans).
 type NotificationOptions struct {
 	Mode          string `json:"mode"`
 	IntervalHours int    `json:"intervalHours"`
+	// At releases the summary at a time of day ("HH:MM") instead of every
+	// IntervalHours. The first scan at or after that time each day reports;
+	// later scans the same day stay quiet. It is read in the channel's scan
+	// schedule zone. Empty keeps the IntervalHours behaviour.
+	At string `json:"at,omitempty"`
 }
 
 type AccessReport struct {

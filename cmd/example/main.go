@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -19,6 +20,7 @@ import (
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner"
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner/authorizer"
 	"github.com/MobDev-Hobby/telegram-nda-guard/controllers/scanner/webapi"
+	"github.com/MobDev-Hobby/telegram-nda-guard/processors"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/kicker"
 	"github.com/MobDev-Hobby/telegram-nda-guard/processors/reporter"
 	redisaudit "github.com/MobDev-Hobby/telegram-nda-guard/storage/audit/redis"
@@ -36,6 +38,31 @@ import (
 )
 
 // //nolint: revive
+// parseWeekdays reads CHANNEL_SCAN_DAYS: comma-separated short day names, or
+// the "mon-fri" alias. An empty or unrecognised entry means every day, which
+// is the safe direction - scanning more often, not less.
+func parseWeekdays(spec string) []time.Weekday {
+	names := map[string]time.Weekday{
+		"sun": time.Sunday, "mon": time.Monday, "tue": time.Tuesday,
+		"wed": time.Wednesday, "thu": time.Thursday, "fri": time.Friday,
+		"sat": time.Saturday,
+	}
+	spec = strings.ToLower(strings.TrimSpace(spec))
+	switch spec {
+	case "":
+		return nil
+	case "mon-fri":
+		return []time.Weekday{time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday}
+	}
+	out := make([]time.Weekday, 0, 7)
+	for _, part := range strings.Split(spec, ",") {
+		if day, ok := names[strings.TrimSpace(part)]; ok {
+			out = append(out, day)
+		}
+	}
+	return out
+}
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
@@ -197,6 +224,17 @@ func main() {
 		kicker.WithCleanUnknown(options.KickUnknownUsers),
 	)
 
+	// A scan schedule is a time of day rather than an interval. Leaving
+	// CHANNEL_SCAN_AT empty keeps every channel on CHANNEL_SCAN_INTERVAL.
+	var defaultNotifications *processors.NotificationOptions
+	if options.DailyReportAt != "" {
+		defaultNotifications = &processors.NotificationOptions{
+			Mode:          scanner.NotificationViolationsSummary,
+			IntervalHours: 24,
+			At:            options.DailyReportAt,
+		}
+	}
+
 	channels := make([]scanner.ProtectedChannel, 0, len(options.Channels))
 	for _, channelID := range options.Channels {
 		channels = append(
@@ -206,6 +244,7 @@ func main() {
 				CommandChannelIDs:    commandChannels[channelID],
 				AutoScan:             true,
 				AutoClean:            options.AutoKickUsers,
+				Notifications:        defaultNotifications,
 				AccessChecker:        cachedAccessChecker,
 				ScanReportProcessor:  scanReporter,
 				CleanReportProcessor: cleanReporter,
@@ -219,6 +258,18 @@ func main() {
 		scanner.WithSetAdminKey(options.AdminSecret),
 		scanner.WithChannelAutoScanInterval(options.ChannelScanInterval),
 		scanner.WithCheckAccessInterval(options.AccessCheckInterval),
+		// Before WithDefaultScanSchedule and WithChannels, so both validate
+		// against the configured zone.
+		scanner.WithScheduleTimeZone(options.ScheduleTZ),
+	}
+	if options.ChannelScanAt != "" {
+		controllerOptions = append(controllerOptions, scanner.WithDefaultScanSchedule(processors.ScanSchedule{
+			At:       options.ChannelScanAt,
+			Weekdays: parseWeekdays(options.ChannelScanDays),
+			TZ:       options.ScheduleTZ,
+		}))
+	}
+	controllerOptions = append(controllerOptions,
 		scanner.WithChannels(channels),
 		scanner.WithDefaultScanProcessor(scanReporter),
 		scanner.WithDefaultCleanProcessor(cleanReporter),
@@ -226,7 +277,7 @@ func main() {
 		// Mini App kicks go through the same rate-limited kicker as /clean.
 		scanner.WithUserKicker(cleanReporter),
 		scanner.WithDefaultCleanOptions(cleanReporter.DefaultCleanOptions()),
-	}
+	)
 	if options.MiniAppURL != "" {
 		if options.WebAddr == "" {
 			logger.Panicf("MINIAPP_URL needs WEB_ADDR: the Mini App is served by the web API")

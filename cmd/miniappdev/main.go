@@ -71,9 +71,17 @@ func (s *svc) SetChannelSettings(_ context.Context, id int64, st scanner.Channel
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c := s.channels[id]
-	c.AutoScan, c.AutoClean, c.AllowClean = st.AutoScan, st.AutoClean, st.AllowClean
-	c.KeepBanned, c.CleanMessages, c.CleanUnknown, c.CustomCleanOptions = st.KeepBanned, st.CleanMessages, st.CleanUnknown, true
-	c.JoinRequests = st.JoinRequests
+	// Omitted switches keep their current value, as in the real service.
+	setBool(&c.AutoScan, st.AutoScan)
+	setBool(&c.AutoClean, st.AutoClean)
+	setBool(&c.AllowClean, st.AllowClean)
+	setBool(&c.KeepBanned, st.KeepBanned)
+	setBool(&c.CleanMessages, st.CleanMessages)
+	setBool(&c.CleanUnknown, st.CleanUnknown)
+	c.CustomCleanOptions = true
+	if st.JoinRequests != "" {
+		c.JoinRequests = st.JoinRequests
+	}
 	if st.Notifications != nil {
 		c.Notifications = *st.Notifications
 	}
@@ -81,6 +89,22 @@ func (s *svc) SetChannelSettings(_ context.Context, id int64, st scanner.Channel
 	s.log(audit.ActionSettingsChanged, nil, nil)
 	return nil
 }
+func (s *svc) SetChannelSchedule(_ context.Context, id int64, schedule *processors.ScanSchedule, _ int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := s.channels[id]
+	c.ScanSchedule = schedule
+	s.channels[id] = c
+	s.log(audit.ActionSettingsChanged, nil, nil)
+	return nil
+}
+
+func setBool(target *bool, value *bool) {
+	if value != nil {
+		*target = *value
+	}
+}
+
 func (s *svc) StartChannelScan(_ context.Context, id, _ int64) (scanner.ScanView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

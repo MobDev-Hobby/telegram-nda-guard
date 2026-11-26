@@ -47,6 +47,17 @@ type ChannelView struct {
 	JoinRequestsEnabled bool   `json:"joinRequestsEnabled"`
 	// Health is the channel's traffic light.
 	Health ChannelHealth `json:"health"`
+	// ScanSchedule is the effective scan schedule: the channel's own when set,
+	// else the service default. It is absent for channels that fall back to a
+	// plain interval.
+	ScanSchedule *processors.ScanSchedule `json:"scanSchedule,omitempty"`
+	// CustomScanSchedule is true when the channel overrides the default.
+	CustomScanSchedule bool `json:"customScanSchedule"`
+	// ScanScheduleText renders the effective schedule for display, naming the
+	// zone so a bare time is never ambiguous.
+	ScanScheduleText string `json:"scanScheduleText,omitempty"`
+	// ScanScheduleTZ is the zone the schedule's times are read in.
+	ScanScheduleTZ string `json:"scanScheduleTz,omitempty"`
 }
 
 // CanScan reports whether the bot can scan this channel (is a member).

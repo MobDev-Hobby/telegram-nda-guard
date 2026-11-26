@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -68,15 +69,23 @@ type UserKicker interface {
 }
 
 // ChannelSettings is every per-channel setting an administrator can change.
+//
+// The switches are pointers on purpose: this struct is decoded straight from
+// the settings request body, and a plain bool makes an omitted field
+// indistinguishable from an explicit false. A client that sent only the one
+// setting it meant to change would switch every other automation off - which
+// is how a channel lost its scanning without anyone asking for it. nil means
+// "leave as it is".
 type ChannelSettings struct {
-	AutoScan      bool `json:"autoScan"`
-	AutoClean     bool `json:"autoClean"`
-	AllowClean    bool `json:"allowClean"`
-	KeepBanned    bool `json:"keepBanned"`
-	CleanMessages bool `json:"cleanMessages"`
-	CleanUnknown  bool `json:"cleanUnknown"`
-	// JoinRequests is the join request mode: off, auto or manual.
-	JoinRequests  string                          `json:"joinRequests"`
+	AutoScan      *bool `json:"autoScan,omitempty"`
+	AutoClean     *bool `json:"autoClean,omitempty"`
+	AllowClean    *bool `json:"allowClean,omitempty"`
+	KeepBanned    *bool `json:"keepBanned,omitempty"`
+	CleanMessages *bool `json:"cleanMessages,omitempty"`
+	CleanUnknown  *bool `json:"cleanUnknown,omitempty"`
+	// JoinRequests is the join request mode: off, auto or manual. Empty means
+	// "leave as it is".
+	JoinRequests  string                          `json:"joinRequests,omitempty"`
 	Notifications *processors.NotificationOptions `json:"notifications,omitempty"`
 }
 
@@ -141,6 +150,9 @@ type MiniAppService interface {
 	GetChannel(ctx context.Context, channelID int64) (ChannelView, error)
 	// SetChannelSettings replaces every per-channel setting at once.
 	SetChannelSettings(ctx context.Context, channelID int64, settings ChannelSettings, callerID int64) error
+	// SetChannelSchedule sets when the channel is scanned; nil falls back to
+	// the service default.
+	SetChannelSchedule(ctx context.Context, channelID int64, schedule *processors.ScanSchedule, callerID int64) error
 	// StartChannelScan lists and classifies the channel's members in the
 	// background. A scan already running for the channel is returned instead
 	// of starting another.
@@ -217,32 +229,106 @@ func (d *Domain) SetChannelSettings(ctx context.Context, channelID int64, settin
 		return ErrJoinRequestsDisabled
 	}
 	err := d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
-		pc.JoinRequestMode = settings.JoinRequests
+		if settings.JoinRequests != "" {
+			pc.JoinRequestMode = settings.JoinRequests
+		}
 		if settings.Notifications != nil {
 			opts := *settings.Notifications
 			pc.Notifications = &opts
 		}
-		pc.AutoScan = settings.AutoScan
-		pc.AutoClean = settings.AutoClean
-		pc.AllowClean = settings.AllowClean
-		pc.CleanOptions = &processors.CleanOptions{
-			KeepBanned:    settings.KeepBanned,
-			CleanMessages: settings.CleanMessages,
-			CleanUnknown:  settings.CleanUnknown,
+		applyBool(&pc.AutoScan, settings.AutoScan)
+		applyBool(&pc.AutoClean, settings.AutoClean)
+		applyBool(&pc.AllowClean, settings.AllowClean)
+		// Only give the channel its own cleaning options when the request
+		// actually sets one. Materialising them from the defaults would stop
+		// the channel tracking the service defaults for good, and would mark
+		// it as customised in the UI, over a request that never mentioned
+		// them.
+		if settings.KeepBanned != nil || settings.CleanMessages != nil || settings.CleanUnknown != nil {
+			clean := d.defaultCleanOptions
+			if pc.CleanOptions != nil {
+				clean = *pc.CleanOptions
+			}
+			applyBool(&clean.KeepBanned, settings.KeepBanned)
+			applyBool(&clean.CleanMessages, settings.CleanMessages)
+			applyBool(&clean.CleanUnknown, settings.CleanUnknown)
+			pc.CleanOptions = &clean
 		}
 	})
 	if err != nil {
 		return err
 	}
 	pc, _ := d.getProtectedChannel(channelID)
+	details := map[string]any{"joinRequests": pc.JoinRequestMode, "notifications": pc.Notifications,
+		"autoScan": pc.AutoScan, "autoClean": pc.AutoClean, "allowClean": pc.AllowClean}
+	if pc.CleanOptions != nil {
+		details["keepBanned"] = pc.CleanOptions.KeepBanned
+		details["cleanMessages"] = pc.CleanOptions.CleanMessages
+		details["cleanUnknown"] = pc.CleanOptions.CleanUnknown
+	}
+	d.recordAudit(ctx, pc, audit.Event{
+		ActorID: callerID, Action: audit.ActionSettingsChanged, Details: details,
+	}, fmt.Sprintf("Settings of %s changed by %s.", html.EscapeString(d.channelTitle(channelID)), actorLink(callerID, d.userName(callerID))))
+	return nil
+}
+
+// applyBool writes value to target when the caller supplied one.
+func applyBool(target *bool, value *bool) {
+	if value != nil {
+		*target = *value
+	}
+}
+
+// SetChannelSchedule implements MiniAppService: it sets when a channel is
+// scanned. A nil schedule clears the override and the channel falls back to
+// the service default.
+//
+// The schedule is validated before anything is persisted, so one the host
+// cannot honour is refused and the channel keeps the schedule it had. The cron
+// entry is built after the record is written; validation compiles the same
+// spec, so a validated schedule installs.
+func (d *Domain) SetChannelSchedule(ctx context.Context, channelID int64, schedule *processors.ScanSchedule, callerID int64) error {
+	if _, ok := d.getProtectedChannel(channelID); !ok {
+		return fmt.Errorf("channel %d not found", channelID)
+	}
+	var stored *processors.ScanSchedule
+	if schedule != nil {
+		copied := *schedule
+		copied.Weekdays = slices.Clone(schedule.Weekdays)
+		if copied.TZ == "" {
+			// Keep the zone the channel is already on. A client that edits
+			// only the time and days (the bundled Mini App does) would
+			// otherwise silently move the channel to the service default, or
+			// to UTC when the service sets none.
+			pc, _ := d.getProtectedChannel(channelID)
+			copied.TZ = d.scheduleLocationOf(pc).String()
+		}
+		if err := validateSchedule(copied, d.scheduleTZ); err != nil {
+			return err
+		}
+		stored = &copied
+	}
+
+	if err := d.updateProtectedChannel(ctx, channelID, func(pc *ProtectedChannel) {
+		pc.ScanSchedule = stored
+	}); err != nil {
+		return err
+	}
+	// reinstallSchedule reads the record we just wrote, so it picks up either
+	// the new schedule or the default the channel fell back to. An explicit
+	// change replaces whatever the channel had.
+	if err := d.reinstallSchedule(channelID); err != nil {
+		return err
+	}
+
+	pc, _ := d.getProtectedChannel(channelID)
 	d.recordAudit(ctx, pc, audit.Event{
 		ActorID: callerID, Action: audit.ActionSettingsChanged,
-		Details: map[string]any{
-			"autoScan": settings.AutoScan, "autoClean": settings.AutoClean, "allowClean": settings.AllowClean,
-			"keepBanned": settings.KeepBanned, "cleanMessages": settings.CleanMessages, "cleanUnknown": settings.CleanUnknown,
-			"joinRequests": settings.JoinRequests, "notifications": settings.Notifications,
-		},
-	}, fmt.Sprintf("Settings of %s changed by %s.", html.EscapeString(d.channelTitle(channelID)), actorLink(callerID, d.userName(callerID))))
+		Details: map[string]any{"scanSchedule": stored},
+	}, fmt.Sprintf("Scan schedule of %s changed by %s: %s.",
+		html.EscapeString(d.channelTitle(channelID)),
+		actorLink(callerID, d.userName(callerID)),
+		html.EscapeString(d.describeScheduleOf(pc))))
 	return nil
 }
 
