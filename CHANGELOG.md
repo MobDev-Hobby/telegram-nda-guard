@@ -27,7 +27,7 @@ When in doubt, add a `Migration` note. It is cheaper than a silent break.
 
 ---
 
-## [Unreleased]
+## [0.6.0] — 2026-11-26
 
 ### Added
 
